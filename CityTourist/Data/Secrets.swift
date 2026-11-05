@@ -22,6 +22,11 @@ enum Secrets {
     /// row isn't shown. Kept out of source like the keys.
     static let feedbackEmail: String? = key("FeedbackEmail", orEnvironment: "FEEDBACK_EMAIL")
 
+    /// Optional: for the simulator AI concierge prototype, so you can put
+    /// `AnthropicAPIKey` once in `Secrets.plist` (or `ANTHROPIC_API_KEY` on the
+    /// scheme) instead of pasting it into the terminal every time.
+    static let anthropicAPIKey: String? = key("AnthropicAPIKey", orEnvironment: "ANTHROPIC_API_KEY")
+
     private static func key(_ name: String, orEnvironment variable: String) -> String? {
         if let url = Bundle.main.url(forResource: "Secrets", withExtension: "plist"),
            let data = try? Data(contentsOf: url),

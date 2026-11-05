@@ -11,12 +11,12 @@ struct RatingLabel: View {
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: "star.fill")
-                .font(.system(size: size - 2))
+                .font(size <= 12 ? .caption2 : .caption)
             Text(rating, format: .number.precision(.fractionLength(2)))
-                .font(.system(size: size, weight: .medium))
+                .font(size <= 12 ? .caption.weight(.medium) : .subheadline.weight(.medium))
             if let reviewCount {
                 Text("(\(reviewCount))")
-                    .font(.system(size: size, weight: .regular))
+                    .font(size <= 12 ? .caption : .subheadline)
                     .foregroundStyle(Palette.inkMuted)
             }
         }
@@ -57,6 +57,29 @@ struct HeartButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(isSaved ? "Remove from saved" : "Save")
+    }
+}
+
+/// Circular glass action button over card photography (e.g. quick-add to trip).
+struct PhotoActionButton: View {
+    let systemImage: String
+    let label: String
+    var size: CGFloat = 15
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: size, weight: .semibold))
+                .foregroundStyle(Palette.onPhotoInk)
+                .frame(width: 34, height: 34)
+                .background(Palette.onPhoto.opacity(0.92), in: Circle())
+                .floatingShadow(y: 2, radius: 6, opacity: 0.2)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 }
 
@@ -128,8 +151,8 @@ struct CapsuleActionButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                Text(title).font(.system(size: 14, weight: .semibold))
-                Image(systemName: systemImage).font(.system(size: 14, weight: .semibold))
+                Text(title).font(.subheadline.weight(.semibold))
+                Image(systemName: systemImage).font(.subheadline.weight(.semibold))
             }
             .foregroundStyle(Palette.canvas)
             .padding(.horizontal, 16)
@@ -149,7 +172,7 @@ struct GlassCircleButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Palette.ink)
                 .frame(width: 44, height: 44)
                 .background(.regularMaterial, in: Circle())
@@ -168,7 +191,7 @@ struct Chip: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            if let systemImage { Image(systemName: systemImage).font(.system(size: 13, weight: .medium)) }
+            if let systemImage { Image(systemName: systemImage).font(.footnote.weight(.medium)) }
             Text(title).font(.subheadline.weight(isSelected ? .semibold : .regular))
         }
         .foregroundStyle(isSelected ? Palette.canvas : Palette.ink)
@@ -191,7 +214,7 @@ struct CategoryRail: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 30) {
+            HStack(spacing: 28) {
                 item(nil, title: "All", symbol: "sparkles")
                 ForEach(PlaceCategory.allCases) { category in
                     item(category, title: category.title, symbol: category.symbol)
@@ -208,13 +231,13 @@ struct CategoryRail: View {
         return Button {
             withAnimation(.snappy(duration: 0.22)) { selection = category }
         } label: {
-            VStack(spacing: 8) {
+            VStack(spacing: 7) {
                 Image(systemName: symbol)
-                    .font(.system(size: 21, weight: .regular))
+                    .font(.system(size: 20, weight: isSelected ? .medium : .regular))
                 Text(title)
-                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                    .font(.caption.weight(isSelected ? .semibold : .regular))
                     .fixedSize()
-                Rectangle()
+                Capsule()
                     .fill(isSelected ? Palette.ink : .clear)
                     .frame(height: 2)
             }
@@ -227,37 +250,68 @@ struct CategoryRail: View {
 
 // MARK: - Search pill
 
-/// The floating capsule at the top of Explore. Two lines: a bold prompt and a
-/// muted summary of the current search.
+/// The floating capsule at the top of Explore. Left side switches cities or dates;
+/// trailing button searches specific places in the current city.
 struct SearchPill: View {
     let title: String
     let subtitle: String
     let action: () -> Void
+    var onPlaceSearch: (() -> Void)? = nil
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Palette.ink)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                        .font(.system(size: 14, weight: .semibold))
+        HStack(spacing: 8) {
+            Button(action: action) {
+                HStack(spacing: 12) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.subheadline.weight(.bold))
                         .foregroundStyle(Palette.ink)
-                    Text(subtitle)
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(Palette.inkMuted)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 5) {
+                            Text(title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Palette.ink)
+                            Image(systemName: "chevron.down")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(Palette.inkMuted)
+                        }
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(Palette.inkMuted)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 4)
                 }
-                Spacer(minLength: 8)
+                .padding(.vertical, 10)
+                .padding(.leading, 18)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 11)
-            .background(Palette.elevated, in: Capsule())
-            .overlay { Capsule().strokeBorder(Palette.hairline, lineWidth: 1) }
-            .floatingShadow(y: 2, radius: 8, opacity: 0.10)
+            .buttonStyle(.plain)
+
+            if let onPlaceSearch {
+                Button(action: onPlaceSearch) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "text.magnifyingglass")
+                            .font(.caption.weight(.semibold))
+                        Text("Places")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .foregroundStyle(Palette.ink)
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 36)
+                    .background(Palette.surface, in: Capsule())
+                    .overlay {
+                        Capsule().strokeBorder(Palette.hairline, lineWidth: 1)
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 8)
+                .accessibilityLabel("Search places near \(title)")
+                .accessibilityIdentifier("explorePlaceSearch")
+            }
         }
-        .buttonStyle(.plain)
+        .background(Palette.elevated, in: Capsule())
+        .overlay { Capsule().strokeBorder(Palette.hairline, lineWidth: 1) }
+        .floatingShadow(y: 2, radius: 8, opacity: 0.10)
     }
 }
 
@@ -283,7 +337,7 @@ struct SectionHeader: View {
             Spacer()
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Palette.ink)
                     .underline()
             }
@@ -322,7 +376,7 @@ struct EmptyStateView: View {
                 .foregroundStyle(Palette.inkFaint)
                 .padding(.bottom, 4)
             Text(title)
-                .font(.system(size: 20, weight: .semibold))
+                .font(.title3.weight(.semibold))
                 .tracking(-0.3)
                 .foregroundStyle(Palette.ink)
             Text(message)

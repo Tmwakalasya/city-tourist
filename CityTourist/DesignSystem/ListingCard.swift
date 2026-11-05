@@ -7,6 +7,7 @@ struct ListingCard: View {
     let place: Place
     let isSaved: Bool
     var badge: String? = nil
+    var onAddToTrip: (() -> Void)? = nil
     let onToggleSaved: () -> Void
 
     var body: some View {
@@ -16,28 +17,43 @@ struct ListingCard: View {
                 .frame(maxWidth: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: Metric.cardRadius, style: .continuous))
                 .overlay(alignment: .topTrailing) {
-                    HeartButton(isSaved: isSaved, action: onToggleSaved)
-                        .padding(12)
+                    HStack(spacing: 2) {
+                        if let onAddToTrip {
+                            PhotoActionButton(systemImage: "calendar.badge.plus", label: "Add \(place.name) to trip", action: onAddToTrip)
+                        }
+                        HeartButton(isSaved: isSaved, action: onToggleSaved)
+                    }
+                    .padding(8)
                 }
                 .overlay(alignment: .topLeading) {
-                    if let badge {
-                        Text(badge)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Palette.onPhotoInk)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Palette.onPhoto, in: Capsule())
-                            .padding(12)
+                    HStack(spacing: 6) {
+                        if let badge {
+                            Text(badge)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Palette.onPhotoInk)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Palette.onPhoto, in: Capsule())
+                                .floatingShadow(y: 2, radius: 6, opacity: 0.16)
+                        } else {
+                            Label(place.category.title, systemImage: place.category.symbol)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(Palette.onPhotoInk)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Palette.onPhoto.opacity(0.9), in: Capsule())
+                        }
                     }
+                    .padding(12)
                 }
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(place.name)
                         .cardTitleStyle()
                         .lineLimit(2)
                     Spacer(minLength: 0)
-                    RatingLabel(rating: place.rating)
+                    RatingLabel(rating: place.rating, reviewCount: place.reviewCount)
                         .fixedSize(horizontal: true, vertical: false)
                 }
                 Text(place.blurb)
@@ -52,15 +68,15 @@ struct ListingCard: View {
                         Text(open)
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(place.isOpenNow == false ? Brand.rausch : Brand.babu)
-                    } else {
-                        Text(place.neighborhood).metaStyle()
+                        Text("·").foregroundStyle(Palette.inkFaint)
                     }
+                    Text(place.neighborhood).metaStyle()
+                    Text("·").foregroundStyle(Palette.inkFaint)
+                    Text(place.priceLabel)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Palette.ink)
                 }
                 .lineLimit(1)
-                Text(place.priceLabel)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Palette.ink)
-                    .padding(.top, 2)
             }
         }
         .contentShape(Rectangle())
@@ -85,7 +101,7 @@ struct PlaceRow: View {
             Spacer(minLength: 8)
             if let trailingText {
                 Text(trailingText)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.footnote.weight(.medium))
                     .foregroundStyle(Palette.inkMuted)
             }
         }

@@ -1,13 +1,15 @@
 import SwiftUI
+import WebKit
 
 /// Below "Where you'll be": what the place is like on video. YouTube Shorts
-/// play here in YouTube's own player; TikTok and Instagram have no search API
-/// an app can show, so their own search opens instead.
+/// play here in YouTube's own player; TikTok and Instagram have an in-app
+/// Vibe Check sheet with category-smart search angles.
 struct PlaceShortsSection: View {
     let place: Place
 
     @Environment(PlaceShorts.self) private var shorts
     @State private var playing: Playing?
+    @State private var activeVibeAngle: VibeSelection?
 
     private struct Playing: Identifiable {
         let shorts: [PlaceShort]
@@ -15,16 +17,22 @@ struct PlaceShortsSection: View {
         var id: Int { index }
     }
 
+    struct VibeSelection: Identifiable {
+        let angleIndex: Int
+        var id: Int { angleIndex }
+    }
+
     private var city: City { CityDirectory.city(id: place.cityID) }
+    private var angles: [(label: String, suffix: String)] { PlaceShorts.vibeAngles(for: place) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("What it’s like").sectionTitleStyle()
-                Text(shorts.isAvailable
-                     ? "Short videos from YouTube. Recorded, not live."
-                     : "See it in short videos on TikTok or Instagram.").captionStyle()
+                Text("See the real crowd, ambiance, and reviews on TikTok & Shorts.")
+                    .captionStyle()
             }
+            tikTokVibeCard
             if shorts.isAvailable { videos }
             linksOut
         }
@@ -32,7 +40,65 @@ struct PlaceShortsSection: View {
         .fullScreenCover(item: $playing) { playing in
             ShortPlayerView(place: place, shorts: playing.shorts, index: playing.index)
         }
+        .sheet(item: $activeVibeAngle) { selection in
+            VibeCheckSheet(place: place, initialAngleIndex: selection.angleIndex)
+        }
         .accessibilityIdentifier("placeShorts")
+    }
+
+    private var tikTokVibeCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "play.rectangle.on.rectangle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(
+                        LinearGradient(colors: [Brand.rausch, Brand.rauschDeep],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    )
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("TikTok Vibe Check")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Palette.ink)
+                    Text("Tap an angle to preview \(place.name) in \(city.name)")
+                        .font(.caption)
+                        .foregroundStyle(Palette.inkMuted)
+                }
+                Spacer(minLength: 0)
+            }
+
+            FlowLayout(spacing: 8) {
+                ForEach(Array(angles.enumerated()), id: \.offset) { index, angle in
+                    Button {
+                        activeVibeAngle = VibeSelection(angleIndex: index)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "sparkles")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(Brand.rausch)
+                            Text(angle.label)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Palette.ink)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Palette.elevated, in: Capsule())
+                        .overlay {
+                            Capsule().strokeBorder(Palette.hairline, lineWidth: 1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(14)
+        .background(Palette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Palette.hairline, lineWidth: 1)
+        }
     }
 
     @ViewBuilder
@@ -268,5 +334,303 @@ struct ShortPlayerView: View {
         index = newIndex
         playback = PlaceVideoPlayback()
         attempt = UUID()
+    }
+}
+
+/// In-app Vibe Check sheet that fetches real vertical short-form videos for
+/// the exact venue + category angle (e.g. "CASA NEOS Miami crowd DJ") and plays
+/// them natively without TikTok's unauthenticated webview login redirect.
+struct VibeCheckSheet: View {
+    let place: Place
+    var initialAngleIndex: Int = 0
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var angleIndex: Int
+    @State private var clips: [PlaceShort] = []
+    @State private var selectedClipIndex = 0
+    @State private var isLoading = true
+    @State private var playback = PlaceVideoPlayback()
+    @State private var attempt = UUID()
+
+    init(place: Place, initialAngleIndex: Int = 0) {
+        self.place = place
+        self.initialAngleIndex = initialAngleIndex
+        _angleIndex = State(initialValue: initialAngleIndex)
+    }
+
+    private var city: City { CityDirectory.city(id: place.cityID) }
+    private var angles: [(label: String, suffix: String)] { PlaceShorts.vibeAngles(for: place) }
+
+    private var currentSuffix: String {
+        guard angles.indices.contains(angleIndex) else { return "" }
+        return angles[angleIndex].suffix
+    }
+
+    private var currentClip: PlaceShort? {
+        guard clips.indices.contains(selectedClipIndex) else { return nil }
+        return clips[selectedClipIndex]
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                angleBar
+                Hairline()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        playerSection
+                        if clips.count > 1 {
+                            clipStrip
+                        }
+                        externalAppLinks
+                    }
+                    .padding(.horizontal, Metric.gutter)
+                    .padding(.vertical, 16)
+                }
+            }
+            .background(Palette.canvas)
+            .navigationTitle(place.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Done") { dismiss() }
+                        .tint(Brand.rausch)
+                }
+                if let clip = currentClip {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Link(destination: clip.watchURL) {
+                            Image(systemName: "arrow.up.right.square")
+                                .font(.body.weight(.semibold))
+                        }
+                        .tint(Palette.ink)
+                    }
+                }
+            }
+            .task(id: angleIndex) {
+                await loadClips()
+            }
+        }
+    }
+
+    private var angleBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Array(angles.enumerated()), id: \.offset) { idx, angle in
+                    let isSelected = idx == angleIndex
+                    Button {
+                        guard angleIndex != idx else { return }
+                        angleIndex = idx
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "sparkles")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(isSelected ? Brand.rausch : Palette.inkMuted)
+                            Text(angle.label)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(isSelected ? Palette.canvas : Palette.ink)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(isSelected ? Palette.ink : Palette.surface, in: Capsule())
+                        .overlay {
+                            Capsule().strokeBorder(isSelected ? .clear : Palette.hairline, lineWidth: 1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, Metric.gutter)
+            .padding(.vertical, 10)
+        }
+        .background(Palette.elevated)
+    }
+
+    @ViewBuilder
+    private var playerSection: some View {
+        if isLoading {
+            RoundedRectangle(cornerRadius: Metric.cardRadius, style: .continuous)
+                .fill(Palette.surface)
+                .frame(height: 400)
+                .overlay {
+                    VStack(spacing: 10) {
+                        ProgressView().tint(Brand.rausch)
+                        Text("Finding \(place.name) clips…")
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(Palette.inkMuted)
+                    }
+                }
+        } else if let clip = currentClip {
+            VStack(alignment: .leading, spacing: 12) {
+                YouTubePlayer(videoID: clip.id, playback: playback, isActive: scenePhase == .active)
+                    .id(attempt)
+                    .frame(height: 410)
+                    .clipShape(RoundedRectangle(cornerRadius: Metric.cardRadius, style: .continuous))
+                    .overlay {
+                        if playback.state == .loading { ProgressView().tint(.white) }
+                    }
+
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(clip.title)
+                            .cardTitleStyle()
+                            .lineLimit(2)
+                        Text("\(clip.channel) · \(place.neighborhood)")
+                            .metaStyle()
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 8)
+                    if clips.count > 1 {
+                        HStack(spacing: 6) {
+                            Button { selectClip(selectedClipIndex - 1) } label: {
+                                Image(systemName: "chevron.left")
+                                    .font(.subheadline.weight(.semibold))
+                                    .frame(width: 36, height: 36)
+                                    .background(Palette.surface, in: Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(selectedClipIndex == 0)
+
+                            Text("\(selectedClipIndex + 1)/\(clips.count)")
+                                .font(.caption.weight(.semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(Palette.inkMuted)
+
+                            Button { selectClip(selectedClipIndex + 1) } label: {
+                                Image(systemName: "chevron.right")
+                                    .font(.subheadline.weight(.semibold))
+                                    .frame(width: 36, height: 36)
+                                    .background(Palette.surface, in: Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(selectedClipIndex == clips.count - 1)
+                        }
+                    }
+                }
+            }
+        } else {
+            VStack(spacing: 10) {
+                Image(systemName: "video.slash")
+                    .font(.title2)
+                    .foregroundStyle(Palette.inkMuted)
+                Text("No embedded clips found for this angle")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Palette.ink)
+                Text("Open TikTok or Instagram below to see recent posts for \(place.name).")
+                    .font(.caption)
+                    .foregroundStyle(Palette.inkMuted)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(28)
+            .frame(maxWidth: .infinity)
+            .background(Palette.surface, in: RoundedRectangle(cornerRadius: Metric.cardRadius, style: .continuous))
+        }
+    }
+
+    private var clipStrip: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("MORE CLIPS FOR THIS VIBE")
+                .font(.caption2.weight(.bold))
+                .tracking(0.8)
+                .foregroundStyle(Palette.inkMuted)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(Array(clips.enumerated()), id: \.element.id) { idx, clip in
+                        let isSelected = idx == selectedClipIndex
+                        Button {
+                            selectClip(idx)
+                        } label: {
+                            ZStack(alignment: .bottomLeading) {
+                                AsyncImage(url: clip.thumbnailURL) { image in
+                                    image.resizable().scaledToFill()
+                                } placeholder: {
+                                    Palette.surface
+                                }
+                                .frame(width: 112, height: 164)
+                                .clipped()
+
+                                LinearGradient(colors: [.clear, .black.opacity(0.8)],
+                                               startPoint: .center, endPoint: .bottom)
+
+                                Text(clip.title)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.white)
+                                    .lineLimit(2)
+                                    .padding(8)
+                            }
+                            .frame(width: 112, height: 164)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .strokeBorder(isSelected ? Brand.rausch : .clear, lineWidth: 2.5)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private var externalAppLinks: some View {
+        HStack(spacing: 10) {
+            Link(destination: PlaceShorts.tikTokVibeURL(for: place, in: city, angleSuffix: currentSuffix)) {
+                HStack(spacing: 6) {
+                    Text("Open in TikTok")
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption.weight(.bold))
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Palette.ink)
+                .frame(maxWidth: .infinity, minHeight: 42)
+                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Palette.hairline, lineWidth: 1)
+                }
+            }
+
+            if let ig = PlaceShorts.instagramURL(for: place) {
+                Link(destination: ig) {
+                    HStack(spacing: 6) {
+                        Text("Instagram Tag")
+                        Image(systemName: "arrow.up.right")
+                            .font(.caption.weight(.bold))
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Palette.ink)
+                    .frame(maxWidth: .infinity, minHeight: 42)
+                    .background(Palette.surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Palette.hairline, lineWidth: 1)
+                    }
+                }
+            }
+        }
+    }
+
+    private func selectClip(_ newIndex: Int) {
+        guard clips.indices.contains(newIndex), newIndex != selectedClipIndex else { return }
+        selectedClipIndex = newIndex
+        playback = PlaceVideoPlayback()
+        attempt = UUID()
+    }
+
+    private func loadClips() async {
+        isLoading = true
+        let found = await PlaceShorts.fetchLiveVibeShorts(
+            for: place,
+            in: city,
+            angleSuffix: currentSuffix
+        )
+        guard !Task.isCancelled else { return }
+        clips = found
+        selectedClipIndex = 0
+        playback = PlaceVideoPlayback()
+        attempt = UUID()
+        isLoading = false
     }
 }

@@ -100,6 +100,57 @@ final class PlaceShorts {
         return components.url!
     }
 
+    /// Category-tailored TikTok search angles so users can check the crowd,
+    /// dress code, best dishes, or sunset views with a single tap.
+    nonisolated static func vibeAngles(for place: Place) -> [(label: String, suffix: String)] {
+        switch place.category {
+        case .nightlife:
+            return [
+                ("Vibe check", "nightlife vibe"),
+                ("Crowd & DJ", "crowd DJ"),
+                ("Dress code", "dress code line"),
+                ("Inside", "inside night out")
+            ]
+        case .food:
+            return [
+                ("Vibe check", "food review"),
+                ("Must-order", "best dishes menu"),
+                ("Ambiance", "inside patio vibe"),
+                ("Honest review", "worth it review")
+            ]
+        case .museum, .attraction:
+            return [
+                ("Vibe check", "walkthrough"),
+                ("Highlights", "best things to see"),
+                ("Tips", "tips before you go")
+            ]
+        case .nature, .activity:
+            return [
+                ("Vibe check", "views"),
+                ("Golden hour", "sunset"),
+                ("Tips", "what to know")
+            ]
+        }
+    }
+
+    /// Deep-links into TikTok's video search tab with a category/vibe suffix.
+    nonisolated static func tikTokVibeURL(for place: Place, in city: City, angleSuffix: String = "") -> URL {
+        var components = URLComponents(string: "https://www.tiktok.com/search/video")!
+        let base = "\(place.name) \(city.name)"
+        let query = angleSuffix.isEmpty ? base : "\(base) \(angleSuffix)"
+        components.queryItems = [URLQueryItem(name: "q", value: query)]
+        return components.url!
+    }
+
+    /// Mobile YouTube Shorts search URL for a place + vibe angle.
+    nonisolated static func youTubeShortsSearchURL(for place: Place, in city: City, angleSuffix: String = "") -> URL {
+        var components = URLComponents(string: "https://m.youtube.com/results")!
+        let base = YouTubeService.searchQuery(for: place, in: city)
+        let query = angleSuffix.isEmpty ? "\(base) #shorts" : "\(base) \(angleSuffix) #shorts"
+        components.queryItems = [URLQueryItem(name: "search_query", value: query)]
+        return components.url!
+    }
+
     /// The place's name as a hashtag page, "#wynwoodwalls".
     nonisolated static func instagramURL(for place: Place) -> URL? {
         let tag = place.name
@@ -107,5 +158,104 @@ final class PlaceShorts {
             .filter { $0.isASCII && ($0.isLetter || $0.isNumber) }
         guard !tag.isEmpty else { return nil }
         return URL(string: "https://www.instagram.com/explore/tags/\(tag)/")
+    }
+
+    /// Fetches real short-form video clips for a specific place + vibe angle
+    /// (e.g. "CASA NEOS Miami crowd DJ #shorts") without spending API quota,
+    /// so every Vibe Check angle pill plays accurate vertical clips in-app.
+    nonisolated static func fetchLiveVibeShorts(
+        for place: Place,
+        in city: City,
+        angleSuffix: String = "",
+        session: URLSession = .shared
+    ) async -> [PlaceShort] {
+        var components = URLComponents(string: "https://www.youtube.com/results")!
+        let base = YouTubeService.searchQuery(for: place, in: city)
+        let query = angleSuffix.isEmpty ? "\(base) #shorts" : "\(base) \(angleSuffix) #shorts"
+        components.queryItems = [URLQueryItem(name: "search_query", value: query)]
+        guard let url = components.url else { return [] }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 12
+        request.setValue(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
+            forHTTPHeaderField: "User-Agent"
+        )
+        request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
+
+        guard let (data, response) = try? await session.data(for: request),
+              let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode),
+              let html = String(data: data, encoding: .utf8)
+        else { return [] }
+
+        return parseInitialDataShorts(from: html, place: place, city: city)
+    }
+
+    nonisolated private static func parseInitialDataShorts(from html: String, place: Place, city: City) -> [PlaceShort] {
+        let marker = "var ytInitialData = "
+        guard let startRange = html.range(of: marker) else { return [] }
+        let afterMarker = html[startRange.upperBound...]
+        guard let endRange = afterMarker.range(of: ";</script>") else { return [] }
+        let jsonString = String(afterMarker[..<endRange.lowerBound])
+        guard let jsonData = jsonString.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: jsonData)
+        else { return [] }
+
+        var raw: [PlaceShort] = []
+        var seen = Set<String>()
+
+        func walk(_ node: Any) {
+            guard raw.count < 16 else { return }
+            if let dict = node as? [String: Any] {
+                if let vr = dict["videoRenderer"] as? [String: Any],
+                   let vid = vr["videoId"] as? String,
+                   seen.insert(vid).inserted {
+                    let title = extractRunsText(vr["title"])
+                    let channel = extractRunsText(vr["ownerText"]).isEmpty ? "Shorts" : extractRunsText(vr["ownerText"])
+                    if !title.isEmpty {
+                        raw.append(PlaceShort(
+                            id: vid,
+                            title: title,
+                            channel: channel,
+                            thumbnailURL: URL(string: "https://i.ytimg.com/vi/\(vid)/hqdefault.jpg"),
+                            views: nil,
+                            seconds: 45
+                        ))
+                    }
+                } else if let rr = dict["reelItemRenderer"] as? [String: Any],
+                          let vid = rr["videoId"] as? String,
+                          seen.insert(vid).inserted {
+                    let title = (rr["headline"] as? [String: Any])?["simpleText"] as? String ?? ""
+                    if !title.isEmpty {
+                        raw.append(PlaceShort(
+                            id: vid,
+                            title: title,
+                            channel: "Shorts",
+                            thumbnailURL: URL(string: "https://i.ytimg.com/vi/\(vid)/hqdefault.jpg"),
+                            views: nil,
+                            seconds: 45
+                        ))
+                    }
+                } else {
+                    for value in dict.values { walk(value) }
+                }
+            } else if let array = node as? [Any] {
+                for item in array { walk(item) }
+            }
+        }
+
+        walk(root)
+        let matched = raw.filter {
+            YouTubeService.isAccurateMatch(for: place, in: city, text: "\($0.title) \($0.channel)")
+        }
+        return Array((matched.isEmpty ? raw : matched).prefix(8))
+    }
+
+    nonisolated private static func extractRunsText(_ value: Any?) -> String {
+        guard let dict = value as? [String: Any] else { return "" }
+        if let simple = dict["simpleText"] as? String { return simple }
+        guard let runs = dict["runs"] as? [[String: Any]] else { return "" }
+        return runs.compactMap { $0["text"] as? String }.joined()
     }
 }

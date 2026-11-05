@@ -25,6 +25,7 @@ struct TodayView: View {
     @State private var isAddingPlace = false
     @State private var directionsPlace: Place?
     @State private var directionsMode = TravelMode.transit
+    @State private var editingStop: ItineraryStop?
 
     private var trip: Trip? { store.trip(id: tripID) }
 
@@ -59,6 +60,9 @@ struct TodayView: View {
             }
         }
         .navigationTitle("Today")
+        .sheet(item: $editingStop) { stop in
+            StopEditorSheet(tripID: tripID, dayIndex: dayIndex, stop: stop)
+        }
         .sheet(isPresented: $isRunningLate) {
             RunningLateSheet(tripID: tripID, dayIndex: dayIndex)
         }
@@ -157,17 +161,30 @@ struct TodayView: View {
     }
 
     private func nowCard(_ stop: ItineraryStop) -> some View {
-        HStack(spacing: 10) {
-            Circle().fill(Brand.babu).frame(width: 8, height: 8)
-            Text("At \(PlaceDirectory.place(id: stop.placeID)?.name ?? "your stop")")
-                .cardTitleStyle()
-                .lineLimit(1)
-            Spacer(minLength: 8)
-            Text("until \(DayForecast.clockLabel(stop.startMinute + stop.durationMinutes))")
-                .captionStyle()
+        Button { editingStop = stop } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 10) {
+                    Circle().fill(Brand.babu).frame(width: 8, height: 8)
+                    Text("At \(PlaceDirectory.place(id: stop.placeID)?.name ?? "your stop")")
+                        .cardTitleStyle()
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text("until \(DayForecast.clockLabel(stop.startMinute + stop.durationMinutes))")
+                        .captionStyle()
+                }
+                if !stop.note.isEmpty {
+                    Text(stop.note)
+                        .font(.footnote)
+                        .foregroundStyle(Palette.inkMuted)
+                        .italic()
+                        .lineLimit(2)
+                        .padding(.leading, 18)
+                }
+            }
+            .padding(14)
+            .background(Palette.surface, in: RoundedRectangle(cornerRadius: Metric.cardRadius, style: .continuous))
         }
-        .padding(14)
-        .background(Palette.surface, in: RoundedRectangle(cornerRadius: Metric.cardRadius, style: .continuous))
+        .buttonStyle(.plain)
     }
 
     private func nextCard(_ stop: ItineraryStop, in trip: Trip, day: ItineraryDay,
@@ -177,19 +194,42 @@ struct TodayView: View {
         let leave = hop.map { LeaveBy(start: stop.startMinute, travelMinutes: $0.minutes) }
 
         return VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 12) {
-                if let place {
-                    PlacePhoto(place: place, showsGlyph: false)
-                        .frame(width: 64, height: 64)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            Button { editingStop = stop } label: {
+                HStack(alignment: .top, spacing: 12) {
+                    if let place {
+                        PlacePhoto(place: place, showsGlyph: false)
+                            .frame(width: 64, height: 64)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text("Next").captionStyle()
+                            if stop.isBooked {
+                                Text("·").foregroundStyle(Palette.inkFaint)
+                                Text("Booked")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Brand.rausch)
+                            }
+                        }
+                        Text(place?.name ?? "Loading this place").cardTitleStyle().lineLimit(2)
+                        Text("Starts \(stop.timeLabel)").captionStyle()
+                        if !stop.note.isEmpty {
+                            Text(stop.note)
+                                .font(.footnote)
+                                .foregroundStyle(Palette.inkMuted)
+                                .italic()
+                                .lineLimit(2)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Palette.inkFaint)
+                        .padding(.top, 4)
                 }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Next").captionStyle()
-                    Text(place?.name ?? "Loading this place").cardTitleStyle().lineLimit(2)
-                    Text("Starts \(stop.timeLabel)").captionStyle()
-                }
-                Spacer(minLength: 0)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
 
             if let leave, let hop {
                 VStack(alignment: .leading, spacing: 4) {

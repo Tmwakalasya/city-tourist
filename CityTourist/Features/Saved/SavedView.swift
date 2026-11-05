@@ -3,8 +3,23 @@ import SwiftUI
 struct SavedView: View {
     @Environment(AppStore.self) private var store
     @Environment(PlaceCatalog.self) private var catalog
+    @State private var selectedCityID: String?
+    @State private var placeToAdd: Place?
 
     private let columns = [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
+
+    private var savedCities: [City] {
+        var seen = Set<String>()
+        return store.savedPlaces.compactMap { place in
+            guard seen.insert(place.cityID).inserted else { return nil }
+            return CityDirectory.city(id: place.cityID)
+        }
+    }
+
+    private var filteredPlaces: [Place] {
+        guard let selectedCityID else { return store.savedPlaces }
+        return store.savedPlaces.filter { $0.cityID == selectedCityID }
+    }
 
     var body: some View {
         NavigationStack {
@@ -28,6 +43,7 @@ struct SavedView: View {
             .background(Palette.canvas)
             .navigationTitle("Saved")
             .navigationDestination(for: Place.self) { PlaceDetailView(place: $0) }
+            .sheet(item: $placeToAdd) { AddToItinerarySheet(place: $0) }
             .task { await resolveSaved() }
         }
     }
@@ -51,11 +67,11 @@ struct SavedView: View {
                 if missing.allSatisfy(catalog.failedPlaceIDs.contains) {
                     HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.caption.weight(.semibold))
                         Text("Couldn't load \(missing.count) saved \(noun).")
-                            .font(.system(size: 12))
+                            .font(.caption)
                         Button("Try again") { Task { await resolveSaved() } }
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.caption.weight(.semibold))
                             .underline()
                         Spacer(minLength: 0)
                     }
@@ -79,8 +95,33 @@ struct SavedView: View {
     private var grid: some View {
         ScrollView {
             unresolvedNote
+            if savedCities.count > 1 {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        Button {
+                            withAnimation(.snappy(duration: 0.2)) { selectedCityID = nil }
+                        } label: {
+                            Chip(title: "All (\(store.savedPlaces.count))", isSelected: selectedCityID == nil)
+                        }
+                        .buttonStyle(.plain)
+
+                        ForEach(savedCities) { city in
+                            let count = store.savedPlaces.filter { $0.cityID == city.id }.count
+                            Button {
+                                withAnimation(.snappy(duration: 0.2)) { selectedCityID = city.id }
+                            } label: {
+                                Chip(title: "\(city.name) (\(count))", isSelected: selectedCityID == city.id)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, Metric.gutter)
+                }
+                .scrollClipDisabled()
+                .padding(.top, 8)
+            }
             LazyVGrid(columns: columns, spacing: 24) {
-                ForEach(store.savedPlaces) { place in
+                ForEach(filteredPlaces) { place in
                     NavigationLink(value: place) {
                         VStack(alignment: .leading, spacing: 8) {
                             PlacePhoto(place: place)
@@ -88,11 +129,40 @@ struct SavedView: View {
                                 .frame(maxWidth: .infinity)
                                 .clipShape(RoundedRectangle(cornerRadius: Metric.cardRadius, style: .continuous))
                                 .overlay(alignment: .topTrailing) {
-                                    HeartButton(isSaved: true, size: 20) { store.toggleSaved(place) }
+                                    HStack(spacing: 0) {
+                                        PhotoActionButton(
+                                            systemImage: "calendar.badge.plus",
+                                            label: "Add \(place.name) to trip",
+                                            size: 13
+                                        ) {
+                                            placeToAdd = place
+                                        }
+                                        HeartButton(isSaved: true, size: 20) { store.toggleSaved(place) }
+                                    }
+                                    .padding(6)
+                                }
+                                .overlay(alignment: .bottomLeading) {
+                                    Text(place.category.title)
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(Palette.onPhotoInk)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Palette.onPhoto.opacity(0.9), in: Capsule())
                                         .padding(10)
                                 }
-                            Text(place.name).cardTitleStyle().lineLimit(1)
-                            Text(CityDirectory.city(id: place.cityID).name).captionStyle()
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(place.name).cardTitleStyle().lineLimit(1)
+                                HStack(spacing: 4) {
+                                    Text(CityDirectory.city(id: place.cityID).name).captionStyle()
+                                    if !place.neighborhood.isEmpty {
+                                        Text("·").foregroundStyle(Palette.inkFaint)
+                                        Text(place.neighborhood).captionStyle().lineLimit(1)
+                                    }
+                                }
+                                if place.rating > 0 {
+                                    RatingLabel(rating: place.rating, size: 12)
+                                }
+                            }
                         }
                     }
                     .buttonStyle(.plain)

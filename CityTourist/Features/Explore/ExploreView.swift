@@ -3,11 +3,17 @@ import SwiftUI
 struct ExploreView: View {
     @Environment(AppStore.self) private var store
     @Environment(PlaceCatalog.self) private var catalog
+    @Environment(EventCatalog.self) private var eventCatalog
 
     @State private var category: PlaceCategory?
     @State private var isSearchPresented = false
     @State private var isPlaceSearchPresented = false
     @State private var isMapPresented = false
+    @State private var placeToAdd: Place?
+    @State private var selectedEvent: Place?
+    #if DEBUG && targetEnvironment(simulator)
+    @State private var isAIPrototypePresented = false
+    #endif
 
     private var city: City { store.browsingCity }
 
@@ -17,11 +23,24 @@ struct ExploreView: View {
             .sorted { $0.rating > $1.rating }
     }
 
+    private var cityEvents: [Place] {
+        guard category == nil || category == .activity || category == .nightlife else { return [] }
+        return eventCatalog.events(in: store.browsingCityID)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: Metric.cardGap) {
                     header
+
+                    #if DEBUG && targetEnvironment(simulator)
+                    aiPreviewButton
+                    #endif
+
+                    if !cityEvents.isEmpty {
+                        happeningSection
+                    }
 
                     if catalog.state == .loading && results.isEmpty {
                         loadingPlaceholder
@@ -42,7 +61,8 @@ struct ExploreView: View {
                                     place: place,
                                     isSaved: store.isSaved(place),
                                     // Airbnb badges its top result; ours flags the highest rated.
-                                    badge: index == 0 && category == nil ? "Traveller favourite" : nil
+                                    badge: index == 0 && category == nil ? "Traveller favourite" : nil,
+                                    onAddToTrip: { placeToAdd = place }
                                 ) {
                                     store.toggleSaved(place)
                                 }
@@ -56,48 +76,130 @@ struct ExploreView: View {
             }
             .background(Palette.canvas)
             .scrollIndicators(.hidden)
-            .refreshable { await catalog.load(city: city, force: true) }
+            .refreshable {
+                async let placesLoad: () = catalog.load(city: city, force: true)
+                async let eventsLoad: () = eventCatalog.load(city: city, force: true)
+                _ = await (placesLoad, eventsLoad)
+            }
             .safeAreaInset(edge: .top, spacing: 0) { searchHeader }
             .overlay(alignment: .bottom) { mapButton }
             .navigationDestination(for: Place.self) { PlaceDetailView(place: $0) }
             .sheet(isPresented: $isSearchPresented) { SearchSheet() }
             .sheet(isPresented: $isPlaceSearchPresented) { PlaceSearchView(city: city) }
+            .sheet(item: $placeToAdd) { AddToItinerarySheet(place: $0) }
+            .sheet(item: $selectedEvent) { event in
+                NavigationStack {
+                    EventDetailView(place: event)
+                }
+            }
+            #if DEBUG && targetEnvironment(simulator)
+            .sheet(isPresented: $isAIPrototypePresented) { AIRecommendationsView(city: city) }
+            #endif
             .fullScreenCover(isPresented: $isMapPresented) {
                 CityMapView(city: city, places: results)
             }
             .task(id: store.browsingCityID) {
-                await catalog.load(city: city)
+                async let placesLoad: () = catalog.load(city: city)
+                async let eventsLoad: () = eventCatalog.load(city: city)
+                _ = await (placesLoad, eventsLoad)
             }
         }
     }
 
+    private var happeningSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text("Happening in \(city.name)")
+                            .sectionTitleStyle()
+                        Text("LIVE")
+                            .font(.caption2.weight(.bold))
+                            .tracking(0.6)
+                            .foregroundStyle(Brand.rausch)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Brand.rausch.opacity(0.12), in: Capsule())
+                    }
+                    Text("Upcoming concerts, games & live shows over the next 2 weeks")
+                        .captionStyle()
+                }
+                Spacer()
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 14) {
+                    ForEach(cityEvents) { event in
+                        Button { selectedEvent = event } label: {
+                            EventCard(place: event, showsDate: true)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
     // MARK: Header
 
-    private var searchHeader: some View {
-        VStack(spacing: 12) {
-            SearchPill(title: city.name, subtitle: pillSubtitle) {
-                isSearchPresented = true
-            }
-            .padding(.horizontal, Metric.gutter)
-
-            Button {
-                isPlaceSearchPresented = true
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "magnifyingglass")
-                    Text("Search places near \(city.name)")
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.right").font(.caption)
+    #if DEBUG && targetEnvironment(simulator)
+    private var aiPreviewButton: some View {
+        Button { isAIPrototypePresented = true } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "sparkles")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .background(
+                        LinearGradient(colors: [Brand.rausch, Brand.rauschDeep],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    )
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text("Find your kind of place")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Palette.ink)
+                        Text("AI")
+                            .font(.caption2.weight(.bold))
+                            .tracking(0.6)
+                            .foregroundStyle(Brand.rausch)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Brand.rausch.opacity(0.12), in: Capsule())
+                    }
+                    Text("Describe a craving, mood, or free hour in \(city.name)")
+                        .font(.caption)
+                        .foregroundStyle(Palette.inkMuted)
+                        .lineLimit(1)
                 }
-                .font(.subheadline)
-                .foregroundStyle(Palette.inkMuted)
-                .padding(.horizontal, 14)
-                .frame(minHeight: 44)
-                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Palette.inkMuted)
             }
-            .buttonStyle(.plain)
+            .padding(14)
+            .background(Palette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Brand.rausch.opacity(0.22), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("exploreAIPrototype")
+    }
+    #endif
+
+    private var searchHeader: some View {
+        VStack(spacing: 10) {
+            SearchPill(
+                title: city.name,
+                subtitle: pillSubtitle,
+                action: { isSearchPresented = true },
+                onPlaceSearch: { isPlaceSearchPresented = true }
+            )
             .padding(.horizontal, Metric.gutter)
-            .accessibilityIdentifier("explorePlaceSearch")
 
             CategoryRail(selection: $category)
 
@@ -108,7 +210,7 @@ struct ExploreView: View {
     }
 
     private var pillSubtitle: String {
-        catalog.state == .loading ? "Finding places…" : "Anytime · \(results.count) places"
+        catalog.state == .loading ? "Finding places…" : "Switch city or dates · \(results.count) places"
     }
 
     private var header: some View {
@@ -116,12 +218,14 @@ struct ExploreView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(category?.title ?? "Top rated in \(city.name)")
                     .sectionTitleStyle()
-                Text(city.tagline)
-                    .metaStyle()
+                if !city.tagline.isEmpty {
+                    Text(city.tagline)
+                        .metaStyle()
+                }
             }
             dataSourceNote
         }
-        .padding(.top, 20)
+        .padding(.top, 18)
     }
 
     /// Tells you where these results came from, and lets you retry a failure.
@@ -131,15 +235,15 @@ struct ExploreView: View {
         case .failed(let message):
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Showing sample places — \(message)")
-                        .font(.system(size: 12))
+                        .font(.caption)
                         .fixedSize(horizontal: false, vertical: true)
                     Button("Try again") {
                         Task { await catalog.load(city: city, force: true) }
                     }
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .underline()
                 }
             }
@@ -151,13 +255,13 @@ struct ExploreView: View {
 
         case .loaded where catalog.source.isLive:
             Label("Live from Google Places · updated today", systemImage: "dot.radiowaves.up.forward")
-                .font(.system(size: 12, weight: .medium))
+                .font(.caption.weight(.medium))
                 .foregroundStyle(Brand.babu)
 
         case .loaded where !catalog.source.isLive, .idle where !catalog.isLiveDataAvailable:
             Label("Sample places · explore a sample city",
                   systemImage: "info.circle")
-                .font(.system(size: 12))
+                .font(.caption)
                 .foregroundStyle(Palette.inkFaint)
 
         default:
@@ -221,4 +325,5 @@ private extension View {
 #Preview {
     ExploreView().environment(AppStore(loadFromDisk: false))
         .environment(PlaceCatalog())
+        .environment(EventCatalog())
 }

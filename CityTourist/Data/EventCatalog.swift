@@ -13,6 +13,9 @@ final class EventCatalog {
     /// trip id → day key → events that day, earliest first.
     private var byTrip: [Trip.ID: [String: [Place]]] = [:]
     private var loading: Set<Trip.ID> = []
+    /// city id → upcoming events over the next 14 days for the Explore feed.
+    private var byCity: [String: [Place]] = [:]
+    private var loadingCities: Set<String> = []
 
     private let makeService: () -> TicketmasterService?
 
@@ -23,6 +26,54 @@ final class EventCatalog {
 
     func events(for trip: Trip, on date: Date) -> [Place] {
         byTrip[trip.id]?[WeatherService.dayKey(for: date)] ?? []
+    }
+
+    /// All events across any day of the trip, ordered chronologically.
+    func allEvents(for trip: Trip) -> [Place] {
+        guard let map = byTrip[trip.id] else { return [] }
+        return map.keys.sorted().flatMap { map[$0] ?? [] }
+    }
+
+    /// Upcoming events in a city over the next two weeks, for Explore.
+    func events(in cityID: String) -> [Place] {
+        byCity[cityID] ?? []
+    }
+
+    func isLoading(cityID: String) -> Bool {
+        loadingCities.contains(cityID)
+    }
+
+    /// Loads the next 14 days of live events around a city for the Explore screen.
+    func load(city: City, force: Bool = false) async {
+        guard (force || byCity[city.id] == nil),
+              !loadingCities.contains(city.id),
+              let service = makeService() else { return }
+        loadingCities.insert(city.id)
+        defer { loadingCities.remove(city.id) }
+
+        let start = Date.now
+        let end = Calendar.current.date(byAdding: .day, value: 14, to: start) ?? start
+        guard let found = try? await service.events(near: city.coordinate, cityID: city.id,
+                                                     from: start, to: end)
+        else { return }
+
+        let todayKey = WeatherService.dayKey(for: start)
+        var seen = Set<String>()
+        let upcoming = found
+            .filter { place in
+                guard let info = place.event, info.localDate >= todayKey else { return false }
+                let dedupeKey = "\(place.name.localizedLowercase)|\(info.localDate)"
+                return seen.insert(dedupeKey).inserted
+            }
+            .sorted { a, b in
+                let da = a.event?.localDate ?? ""
+                let db = b.event?.localDate ?? ""
+                if da != db { return da < db }
+                return (a.event?.startMinute ?? 0) < (b.event?.startMinute ?? 0)
+            }
+
+        PlaceDirectory.register(upcoming)
+        byCity[city.id] = Array(upcoming.prefix(20))
     }
 
     /// Once per trip per session. A failed fetch isn't remembered, so opening

@@ -176,7 +176,7 @@ struct TripDetailView: View {
     private func hero(_ trip: Trip) -> some View {
         PlacePhoto(seed: "trip-\(trip.cityID)", category: .attraction,
                        photoURL: CityDirectory.city(id: trip.cityID).photoURL)
-            .frame(height: 180)
+            .frame(height: 170)
             .clipped()
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -190,7 +190,7 @@ struct TripDetailView: View {
                 .foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.4), radius: 10, y: 2)
                 .padding(.horizontal, Metric.gutter)
-                .padding(.bottom, 20)
+                .padding(.bottom, 18)
             }
     }
 
@@ -198,39 +198,60 @@ struct TripDetailView: View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 10) {
                         ForEach(Array(trip.days.enumerated()), id: \.element.id) { index, day in
+                            let isSelected = dayIndex == index
+                            let forecast = weather.forecast(for: trip, on: day.date)
                             Button {
                                 withAnimation(.snappy(duration: 0.22)) { dayIndex = index }
                             } label: {
-                                VStack(spacing: 6) {
-                                    Chip(
-                                        title: "Day \(index + 1) · \(day.date.formatted(.dateTime.weekday(.abbreviated).day()))",
-                                        isSelected: dayIndex == index
-                                    )
-                                    // Seeing the whole trip's weather at a glance is
-                                    // the point — that's what prompts a swap.
-                                    if let forecast = weather.forecast(for: trip, on: day.date) {
-                                        HStack(spacing: 4) {
+                                VStack(spacing: 4) {
+                                    Text("DAY \(index + 1)")
+                                        .font(.caption2.weight(.bold))
+                                        .tracking(0.6)
+                                        .foregroundStyle(isSelected ? Palette.canvas.opacity(0.75) : Palette.inkMuted)
+                                    Text(day.date.formatted(.dateTime.weekday(.abbreviated).day()))
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(isSelected ? Palette.canvas : Palette.ink)
+                                    if let forecast {
+                                        HStack(spacing: 3) {
                                             Image(systemName: forecast.symbol)
-                                                .font(.system(size: 11))
-                                                .foregroundStyle(forecast.isWet ? Brand.rausch : Palette.inkMuted)
+                                                .font(.caption2)
+                                                .foregroundStyle(
+                                                    forecast.isWet
+                                                        ? (isSelected ? Palette.canvas : Brand.rausch)
+                                                        : (isSelected ? Palette.canvas.opacity(0.85) : Palette.inkMuted)
+                                                )
                                             Text("\(Int(forecast.high.rounded()))\(forecast.unit)")
-                                                .font(.system(size: 11, weight: .medium))
-                                                .foregroundStyle(Palette.inkMuted)
+                                                .font(.caption2.weight(.medium))
+                                                .foregroundStyle(isSelected ? Palette.canvas.opacity(0.85) : Palette.inkMuted)
                                         }
+                                    } else if !day.stops.isEmpty {
+                                        Text("\(day.stops.count) \(day.stops.count == 1 ? "stop" : "stops")")
+                                            .font(.caption2)
+                                            .foregroundStyle(isSelected ? Palette.canvas.opacity(0.75) : Palette.inkMuted)
                                     }
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .frame(minWidth: 84)
+                                .background(isSelected ? Palette.ink : Palette.elevated,
+                                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .strokeBorder(isSelected ? .clear : Palette.hairline, lineWidth: 1)
                                 }
                             }
                             .buttonStyle(.plain)
                             .id(index)
-                            .accessibilityAddTraits(dayIndex == index ? .isSelected : [])
+                            .accessibilityElement(children: .combine)
+                            .accessibilityAddTraits(isSelected ? .isSelected : [])
                         }
                     }
                     .padding(.horizontal, Metric.gutter)
                 }
                 .scrollClipDisabled()
-                .padding(.vertical, 16)
+                .padding(.vertical, 12)
                 .onAppear { proxy.scrollTo(dayIndex, anchor: .center) }
                 .onChange(of: dayIndex) { _, index in
                     proxy.scrollTo(index, anchor: .center)
@@ -245,24 +266,23 @@ struct TripDetailView: View {
         let stops = currentStops(trip)
 
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
+            HStack(alignment: .firstTextBaseline) {
                 Text(dayTitle(trip)).sectionTitleStyle()
                 Spacer()
                 if stops.count > 1 {
                     Button("Reorder") { isReordering = true }
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Palette.ink)
                         .underline()
                 }
             }
             .padding(.horizontal, Metric.gutter)
-            .padding(.top, 24)
+            .padding(.top, 20)
             .padding(.bottom, 8)
 
             forecastBlock(trip, stops: stops)
             fixBanner(trip, stops: stops)
-            lodgingRow(trip)
-            gettingAroundRow(trip)
+            tripContextBar(trip)
 
             if stops.isEmpty {
                 EmptyStateView(
@@ -295,28 +315,43 @@ struct TripDetailView: View {
         }
     }
 
-    /// Ticketed events near the city that day, for adding as booked stops.
-    /// Only there when something's on (and there's a Ticketmaster key).
+    /// Ticketed events near the city that day (or across the trip if this day has none),
+    /// for adding as booked stops.
     @ViewBuilder
     private func whatsOn(_ trip: Trip, stops: [ItineraryStop]) -> some View {
-        let planned = Set(stops.map(\.placeID))
-        let events = trip.days.indices.contains(dayIndex)
+        let planned = Set(trip.days.flatMap(\.stops).map(\.placeID))
+        let dayEvents = trip.days.indices.contains(dayIndex)
             ? eventCatalog.events(for: trip, on: trip.days[dayIndex].date).filter { !planned.contains($0.id) }
             : []
+        let fallbackEvents = dayEvents.isEmpty
+            ? eventCatalog.allEvents(for: trip).filter { !planned.contains($0.id) }
+            : []
+        let events = dayEvents.isEmpty ? fallbackEvents : dayEvents
+        let showingFallback = dayEvents.isEmpty && !fallbackEvents.isEmpty
+
         if !events.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                Text("What's on").sectionTitleStyle()
-                    .padding(.horizontal, Metric.gutter)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(showingFallback ? "Happening during your trip" : "What's on")
+                        .sectionTitleStyle()
+                    if showingFallback {
+                        Text("Live events on other days of this trip")
+                            .captionStyle()
+                    }
+                }
+                .padding(.horizontal, Metric.gutter)
+
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 14) {
                         ForEach(events) { event in
-                            Button { selectedEvent = event } label: { EventCard(place: event) }
-                                .buttonStyle(.plain)
+                            Button { selectedEvent = event } label: {
+                                EventCard(place: event, showsDate: showingFallback)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding(.horizontal, Metric.gutter)
                 }
-                .scrollClipDisabled()
             }
             .padding(.top, 28)
         }
@@ -443,67 +478,69 @@ struct TripDetailView: View {
         }.count
     }
 
-    /// Where each day starts and ends; tap to set or change it.
-    private func lodgingRow(_ trip: Trip) -> some View {
-        Button { isChoosingLodging = true } label: {
+    /// Lodging and Getting Around consolidated onto a single compact pill row
+    /// so trip settings don't push the day's timeline down the screen.
+    private func tripContextBar(_ trip: Trip) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                Image(systemName: "bed.double")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Palette.inkMuted)
-                    .frame(width: 20)
-                if let lodging = trip.lodging {
-                    Text("From \(lodging.name)")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Palette.inkMuted)
-                        .lineLimit(1)
-                    Text("Change")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Palette.ink)
-                        .underline()
-                } else {
-                    Text("Add where you're staying")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Palette.ink)
-                        .underline()
+                Button { isChoosingLodging = true } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bed.double")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Palette.inkMuted)
+                        if let lodging = trip.lodging {
+                            Text("From \(lodging.name)")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(Palette.ink)
+                                .lineLimit(1)
+                        } else {
+                            Text("Add where you're staying")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Palette.ink)
+                        }
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Palette.inkMuted)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Palette.surface, in: Capsule())
+                    .overlay { Capsule().strokeBorder(Palette.hairline, lineWidth: 1) }
                 }
-                Spacer(minLength: 0)
-            }
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, Metric.gutter)
-        .padding(.bottom, 12)
-    }
+                .buttonStyle(.plain)
 
-    /// How hops too long to walk are timed, for every day of the trip.
-    private func gettingAroundRow(_ trip: Trip) -> some View {
-        Menu {
-            Picker("Getting around", selection: Binding(
-                get: { trip.gettingAround },
-                set: { store.setGettingAround($0, for: tripID) }
-            )) {
-                ForEach(GettingAround.allCases, id: \.self) { option in
-                    Label(option.title, systemImage: option.symbol).tag(option)
+                Menu {
+                    Picker("Getting around", selection: Binding(
+                        get: { trip.gettingAround },
+                        set: { store.setGettingAround($0, for: tripID) }
+                    )) {
+                        ForEach(GettingAround.allCases, id: \.self) { option in
+                            Label(option.title, systemImage: option.symbol).tag(option)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: trip.gettingAround.symbol)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Palette.inkMuted)
+                        Text(trip.gettingAround.title)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Palette.ink)
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Palette.inkMuted)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Palette.surface, in: Capsule())
+                    .overlay { Capsule().strokeBorder(Palette.hairline, lineWidth: 1) }
                 }
+                .buttonStyle(.plain)
             }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: trip.gettingAround.symbol)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Palette.inkMuted)
-                    .frame(width: 20, height: 16)
-                Text(trip.gettingAround.title)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Palette.inkMuted)
-                Text("Change")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Palette.ink)
-                    .underline()
-                Spacer(minLength: 0)
-            }
+            .padding(.horizontal, Metric.gutter)
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, Metric.gutter)
-        .padding(.bottom, 12)
+        .scrollClipDisabled()
+        .padding(.bottom, 16)
     }
 
     // MARK: Helpers

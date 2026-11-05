@@ -1,20 +1,57 @@
 import SwiftUI
 
-/// One event in the trip day's "What's on" row.
+/// One event in the Explore or trip day's "What's on" row.
 struct EventCard: View {
     let place: Place
+    var showsDate: Bool = false
 
-    private static let width: CGFloat = 220
+    private static let width: CGFloat = 240
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            PlacePhoto(place: place, showsGlyph: false)
-                .frame(width: Self.width, height: 124)
-                .clipShape(RoundedRectangle(cornerRadius: Metric.cardRadius, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(place.name).cardTitleStyle().lineLimit(2)
+        VStack(alignment: .leading, spacing: 10) {
+            ZStack(alignment: .topLeading) {
+                PlacePhoto(place: place, showsGlyph: false)
+                    .frame(width: Self.width, height: 136)
+                    .clipShape(RoundedRectangle(cornerRadius: Metric.cardRadius, style: .continuous))
+
                 if let event = place.event {
-                    Text("\(DayForecast.clockLabel(event.startMinute)) · \(event.venue)")
+                    HStack {
+                        Text(event.kind.components(separatedBy: " · ").first ?? event.kind)
+                            .font(.caption2.weight(.bold))
+                            .tracking(0.4)
+                            .textCase(.uppercase)
+                            .foregroundStyle(Palette.ink)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(.ultraThinMaterial, in: Capsule())
+
+                        Spacer(minLength: 6)
+
+                        if let price = event.price {
+                            Text(price)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(.black.opacity(0.62), in: Capsule())
+                        }
+                    }
+                    .padding(10)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                if let event = place.event {
+                    Text(timeText(for: event))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Brand.rausch)
+                        .lineLimit(1)
+                }
+                Text(place.name)
+                    .cardTitleStyle()
+                    .lineLimit(2)
+                if let event = place.event {
+                    Text(event.venue)
                         .captionStyle()
                         .lineLimit(1)
                 }
@@ -23,18 +60,27 @@ struct EventCard: View {
         .frame(width: Self.width, alignment: .leading)
         .contentShape(Rectangle())
     }
+
+    private func timeText(for event: EventInfo) -> String {
+        let time = DayForecast.clockLabel(event.startMinute)
+        guard showsDate else { return time }
+        let parser = DateFormatter()
+        parser.dateFormat = "yyyy-MM-dd"
+        guard let date = parser.date(from: event.localDate) else { return time }
+        return "\(date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())) · \(time)"
+    }
 }
 
-/// An event's details, with tickets on Ticketmaster and, when there's a trip
-/// day to put it on, adding it there as a booked stop at its start time.
+/// An event's details, with tickets on Ticketmaster and adding it to a trip.
 struct EventDetailView: View {
     let place: Place
-    /// Where "Add" puts it. Nil when it's opened from a stop already planned.
+    /// Where "Add" puts it. Nil when opened from Explore or a stop already planned.
     var tripID: Trip.ID? = nil
     var dayIndex: Int? = nil
 
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
+    @State private var isAddingToTrip = false
 
     var body: some View {
         ScrollView {
@@ -53,11 +99,21 @@ struct EventDetailView: View {
         .scrollIndicators(.hidden)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if tripID != nil {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Close") { dismiss() }.foregroundStyle(Palette.ink)
-                }
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Close") { dismiss() }.foregroundStyle(Palette.ink)
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    store.toggleSaved(place)
+                } label: {
+                    Image(systemName: store.isSaved(place) ? "heart.fill" : "heart")
+                        .foregroundStyle(store.isSaved(place) ? Brand.rausch : Palette.ink)
+                }
+                .accessibilityLabel(store.isSaved(place) ? "Remove from saved" : "Save event")
+            }
+        }
+        .sheet(isPresented: $isAddingToTrip) {
+            AddToItinerarySheet(place: place)
         }
         .safeAreaInset(edge: .bottom) {
             if let tripID, let dayIndex, let event = place.event {
@@ -71,6 +127,12 @@ struct EventDetailView: View {
                                           startMinute: event.startMinute, isBooked: true)
                             dismiss()
                         }
+                    }
+                }
+            } else if place.event != nil {
+                StickyBottomBar {
+                    PrimaryButton(title: "Add to trip") {
+                        isAddingToTrip = true
                     }
                 }
             }

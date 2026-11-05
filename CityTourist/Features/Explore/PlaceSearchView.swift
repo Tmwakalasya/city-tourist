@@ -25,7 +25,23 @@ struct PlaceSearchView: View {
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var hasQuery: Bool { !trimmedQuery.isEmpty }
     private var visiblePlaces: [Place] {
-        let candidates = hasQuery ? matches : catalog.places(in: city.id).sorted { $0.rating > $1.rating }
+        let catalogPlaces = catalog.places(in: city.id).sorted { $0.rating > $1.rating }
+        let candidates: [Place]
+        if hasQuery {
+            if state == .idle {
+                let q = trimmedQuery.localizedLowercase
+                candidates = catalogPlaces.filter {
+                    $0.name.localizedLowercase.contains(q)
+                        || $0.neighborhood.localizedLowercase.contains(q)
+                        || $0.blurb.localizedLowercase.contains(q)
+                        || $0.category.title.localizedLowercase.contains(q)
+                }
+            } else {
+                candidates = matches
+            }
+        } else {
+            candidates = catalogPlaces
+        }
         return candidates.filter {
             !excludedPlaceIDs.contains($0.id) && (hasQuery || category == nil || $0.category == category)
         }
@@ -95,10 +111,45 @@ struct PlaceSearchView: View {
     @ViewBuilder
     private var searchContent: some View {
         if state == .idle {
-            Text("A favourite café, a museum, or something you want to try.").metaStyle()
-            PrimaryButton(title: "Search", isEnabled: trimmedQuery.count >= 2) { submit() }
-            if trimmedQuery.count < 2 {
-                Text("Enter at least two characters.").captionStyle()
+            Button {
+                submit()
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(Brand.rausch, in: Circle())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Search near \(city.name) for “\(trimmedQuery)”")
+                            .cardTitleStyle()
+                            .lineLimit(1)
+                        Text(trimmedQuery.count < 2
+                             ? "Enter at least two characters"
+                             : (catalog.isLiveDataAvailable ? "Tap or press Search on keyboard" : "Search sample places"))
+                            .captionStyle()
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "arrow.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Palette.inkMuted)
+                }
+                .padding(12)
+                .background(Palette.surface, in: RoundedRectangle(cornerRadius: Metric.cardRadius, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Metric.cardRadius, style: .continuous)
+                        .strokeBorder(Palette.hairline, lineWidth: 1)
+                }
+                .opacity(trimmedQuery.count >= 2 ? 1 : 0.5)
+            }
+            .buttonStyle(.plain)
+            .disabled(trimmedQuery.count < 2)
+
+            if !visiblePlaces.isEmpty {
+                Text("Matching suggestions in \(city.name)")
+                    .captionStyle()
+                    .padding(.top, 4)
+                placeRows
             }
         } else {
             placeRows

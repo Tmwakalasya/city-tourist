@@ -100,13 +100,27 @@ struct FirstDayPlanView: View {
             .pickerStyle(.segmented)
             Text("Up to \(pace.slots.count) stops, including lunch, with \(pace.buffer)-minute breathing room between visits. Finish by 6 pm.").captionStyle()
             if !places.isEmpty {
-                Picker("One must-see", selection: Binding(get: { mustSeeID }, set: { mustSeeID = $0; reset() })) {
-                    Text("Choose for me").tag(String?.none)
-                    ForEach(places.filter { $0.category != .nightlife && $0.event == nil }.sorted { $0.name < $1.name }) { place in
-                        Text(place.name).tag(Optional(place.id))
+                HStack {
+                    Label("One must-see", systemImage: "star")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Palette.ink)
+                    Spacer()
+                    Picker("One must-see", selection: Binding(get: { mustSeeID }, set: { mustSeeID = $0; reset() })) {
+                        Text("Choose for me").tag(String?.none)
+                        ForEach(places.filter { $0.category != .nightlife && $0.event == nil }.sorted { $0.name < $1.name }) { place in
+                            Text(place.name).tag(Optional(place.id))
+                        }
                     }
+                    .labelsHidden()
+                    .tint(Brand.rausch)
                 }
-                .tint(Brand.rausch)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Palette.hairline, lineWidth: 1)
+                }
             }
         }
     }
@@ -124,8 +138,10 @@ struct FirstDayPlanView: View {
             VStack(alignment: .leading, spacing: 16) {
                 SectionHeader(title: "Your day, ready to adjust")
                 Text("\(suggestions.count) of up to \(pace.slots.count) stops. Travel times are estimates for walking and transit; check routes and opening hours before leaving.").captionStyle()
-                ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, suggestion in
-                    proposalCard(suggestion, index: index, suggestions: suggestions)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, suggestion in
+                        proposalCard(suggestion, index: index, suggestions: suggestions)
+                    }
                 }
             }
         }
@@ -135,46 +151,75 @@ struct FirstDayPlanView: View {
                               suggestions: [FirstDayPlanner.Suggestion]) -> some View {
         let previous = index == 0 ? city.coordinate : suggestions[index - 1].place.coordinate
         let hop = TravelEstimate.minutes(from: previous, to: suggestion.place.coordinate)
-        return VStack(alignment: .leading, spacing: 10) {
-            Text("About \(hop) min from \(index == 0 ? "the city centre" : "the previous stop")").captionStyle()
-            HStack(alignment: .top, spacing: 12) {
-                PlacePhoto(place: suggestion.place, showsGlyph: false)
-                    .frame(width: 64, height: 64)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(suggestion.place.name).cardTitleStyle()
-                    Text("\(DayForecast.clockLabel(suggestion.start)) · \(suggestion.place.durationLabel)").metaStyle()
-                    Text(suggestion.reason).captionStyle()
-                    Text(suggestion.place.weeklyHours == nil ? "Opening hours unknown" : "Fits listed opening hours")
-                        .captionStyle()
-                }
+        let isLast = index == suggestions.count - 1
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: index == 0 ? "mappin.and.ellipse" : "figure.walk")
+                    .font(.caption2.weight(.semibold))
+                Text("About \(hop) min from \(index == 0 ? "the city centre" : "the previous stop")")
+                    .font(.footnote)
             }
-            HStack(spacing: 24) {
-                if suggestion.id != mustSeeID {
-                    Button("Swap") {
-                        if let replacement = planner.replacing(suggestion.id, in: suggestions, among: places, excluding: skipped) {
-                            skipped.insert(suggestion.id)
-                            proposal = replacement
-                            message = nil
-                        } else {
-                            message = "No other place fits this slot and your interests. Try removing it or changing your preferences."
+            .foregroundStyle(Palette.inkMuted)
+            .padding(.bottom, 8)
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    PlacePhoto(place: suggestion.place, showsGlyph: false)
+                        .frame(width: 64, height: 64)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(suggestion.place.name).cardTitleStyle()
+                            Spacer(minLength: 6)
+                            Text(DayForecast.clockLabel(suggestion.start))
+                                .font(.footnote.weight(.semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(Brand.rausch)
                         }
+                        Text("\(suggestion.place.durationLabel) · \(suggestion.reason)").captionStyle()
+                        Text(suggestion.place.weeklyHours == nil ? "Opening hours unknown" : "Fits listed opening hours")
+                            .captionStyle()
                     }
-                    .accessibilityLabel("Swap \(suggestion.place.name)")
                 }
-                Button("Remove", role: .destructive) {
-                    proposal = suggestions.filter { $0.id != suggestion.id }
-                    if suggestion.id == mustSeeID { mustSeeID = nil }
-                    message = nil
+                HStack(spacing: 20) {
+                    if suggestion.id != mustSeeID {
+                        Button("Swap") {
+                            if let replacement = planner.replacing(suggestion.id, in: suggestions, among: places, excluding: skipped) {
+                                skipped.insert(suggestion.id)
+                                proposal = replacement
+                                message = nil
+                            } else {
+                                message = "No other place fits this slot and your interests. Try removing it or changing your preferences."
+                            }
+                        }
+                        .accessibilityLabel("Swap \(suggestion.place.name)")
+                    }
+                    Button("Remove", role: .destructive) {
+                        proposal = suggestions.filter { $0.id != suggestion.id }
+                        if suggestion.id == mustSeeID { mustSeeID = nil }
+                        message = nil
+                    }
+                    .accessibilityLabel("Remove \(suggestion.place.name)")
                 }
-                .accessibilityLabel("Remove \(suggestion.place.name)")
+                .font(.footnote.weight(.semibold))
+                .tint(Brand.rausch)
             }
-            .font(.system(size: 14, weight: .semibold))
-            .tint(Brand.rausch)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Palette.elevated, in: RoundedRectangle(cornerRadius: Metric.cardRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Metric.cardRadius, style: .continuous)
+                    .strokeBorder(Palette.hairline, lineWidth: 1)
+            }
+
+            if !isLast {
+                Rectangle()
+                    .fill(Palette.hairline)
+                    .frame(width: 1.5, height: 18)
+                    .padding(.leading, 20)
+                    .padding(.vertical, 4)
+            }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Palette.surface, in: RoundedRectangle(cornerRadius: Metric.cardRadius))
     }
 
     private func reset() {
