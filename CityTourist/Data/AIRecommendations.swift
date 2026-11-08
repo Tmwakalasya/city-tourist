@@ -93,14 +93,11 @@ struct AIRecommendationService {
         var errorDescription: String? {
             switch self {
             case .unavailable:
-                #if targetEnvironment(simulator)
-                "The prototype connection is unavailable. Start the local relay on your Mac, then try again."
-                #else
-                "AI Concierge is temporarily unavailable right now. Please try again in a moment."
-                #endif
-            case .invalidReply: "The suggestions couldn’t be verified against these places. Please try again."
-            case .rateLimited: "AI Concierge has reached today’s 15-search beta limit on this device. Try again tomorrow."
-            case .rejected(let message): message
+                let keys = Secrets.plistKeyNames.joined(separator: ", ")
+                return "AI Concierge couldn’t find AnthropicAPIKey in Secrets.plist (found keys: \(keys.isEmpty ? "none" : keys))."
+            case .invalidReply: return "The suggestions couldn’t be verified against these places. Please try again."
+            case .rateLimited: return "AI Concierge has reached today’s 15-search beta limit on this device. Try again tomorrow."
+            case .rejected(let message): return message
             }
         }
     }
@@ -384,6 +381,7 @@ struct AIRecommendationService {
         request.httpMethod = "POST"
         request.timeoutInterval = 35
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(AnthropicRequest(
@@ -397,6 +395,9 @@ struct AIRecommendationService {
         guard let http = response as? HTTPURLResponse else { throw Failure.invalidReply }
         guard http.statusCode == 200 else {
             if http.statusCode == 401 || http.statusCode == 403 {
+                if apiKey.hasPrefix("apikey_") {
+                    throw Failure.rejected("AnthropicAPIKey in Secrets.plist is set to a Key ID (apikey_...). Replace it with a secret key starting with sk-ant-...")
+                }
                 throw Failure.rejected("Anthropic API key was rejected. Check AnthropicAPIKey in Secrets.plist.")
             }
             if http.statusCode == 429 {
