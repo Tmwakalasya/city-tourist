@@ -27,6 +27,8 @@ final class RequestBudget: @unchecked Sendable {
     static let youtube = RequestBudget(name: "youtube", limits: Limits(perMinute: 10, perDay: 40))
     /// Ticketmaster allows 5,000 calls a day for the whole key.
     static let ticketmaster = RequestBudget(name: "ticketmaster", limits: Limits(perMinute: 20, perDay: 200))
+    /// AI Concierge searches per device in Build 3 beta (5/min, 15/day).
+    static let aiConcierge = RequestBudget(name: "aiConcierge", limits: Limits(perMinute: 5, perDay: 15))
 
     /// No limit, for tests against a stubbed session.
     static var unlimited: RequestBudget {

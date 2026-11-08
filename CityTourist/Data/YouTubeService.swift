@@ -58,7 +58,7 @@ struct YouTubeService {
         search.queryItems = [
             URLQueryItem(name: "part", value: "id"),
             URLQueryItem(name: "type", value: "video"),
-            URLQueryItem(name: "q", value: "\(place.name) \(city.name)"),
+            URLQueryItem(name: "q", value: Self.searchQuery(for: place, in: city)),
             URLQueryItem(name: "videoDuration", value: "short"),
             URLQueryItem(name: "videoEmbeddable", value: "true"),
             URLQueryItem(name: "safeSearch", value: "strict"),
@@ -81,7 +81,24 @@ struct YouTubeService {
         ]
         let videos: VideosResponse = try await get(details.url!)
         let byID = Dictionary((videos.items ?? []).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        return Array(ids.compactMap { byID[$0]?.toShort(about: place.name) }.prefix(Self.maxResults))
+        return Array(ids.compactMap { byID[$0]?.toShort(about: place, in: city) }.prefix(Self.maxResults))
+    }
+
+    /// Single-word venue names (like "LIV", "Space", "Story", "Swan") collide
+    /// with sports, NASA, or generic terms unless disambiguated by category.
+    static func searchQuery(for place: Place, in city: City) -> String {
+        let distinctive = words(in: place.name).filter { $0.count >= 3 && !commonWords.contains($0) }
+        guard distinctive.count <= 1 else {
+            return "\(place.name) \(city.name)"
+        }
+        switch place.category {
+        case .nightlife:
+            return "\(place.name) \(city.name) nightclub"
+        case .food:
+            return "\(place.name) \(city.name) restaurant"
+        default:
+            return "\(place.name) \(city.name)"
+        }
     }
 
     private func get<Response: Decodable>(_ url: URL) async throws -> Response {
@@ -114,6 +131,34 @@ struct YouTubeService {
         if folded.contains(wanted.joined()) { return true }
         let present = Set(words(in: text))
         return wanted.filter(present.contains).count * 2 >= wanted.count
+    }
+
+    /// Filters out off-topic collisions (e.g. "LIV Golf" for LIV Nightclub) and
+    /// ensures 1-word venue names also reference the city or category.
+    static func isAccurateMatch(for place: Place, in city: City, text: String) -> Bool {
+        guard isAbout(place.name, text: text) else { return false }
+        let folded = fold(text)
+        if place.category == .nightlife {
+            let offTopic = ["liv golf", "pga tour", "golf tournament", "outer space", "nasa", "minecraft", "fortnite", "roblox"]
+            if offTopic.contains(where: { folded.contains($0) }) { return false }
+        }
+        let distinctive = words(in: place.name).filter { $0.count >= 3 && !commonWords.contains($0) }
+        if distinctive.count == 1 {
+            let cityWords = words(in: city.name).filter { $0.count >= 3 }
+            let areaWords = words(in: place.neighborhood).filter { $0.count >= 3 }
+            let categoryHints: [String] = switch place.category {
+            case .nightlife: ["club", "nightclub", "nightlife", "dj", "party", "bar", "lounge", "miami", "beach"]
+            case .food: ["food", "restaurant", "eat", "menu", "dinner", "lunch", "cafe", "bakery", "brunch"]
+            case .museum: ["museum", "art", "gallery", "exhibit"]
+            case .nature: ["park", "beach", "garden", "view"]
+            case .attraction, .activity: []
+            }
+            let contextTokens = Set(cityWords + areaWords + categoryHints)
+            if !contextTokens.isEmpty && !contextTokens.contains(where: { folded.contains($0) }) {
+                return false
+            }
+        }
+        return true
     }
 
     /// Words in so many names that they don't say which place a video is of.
@@ -197,13 +242,13 @@ private struct VideosResponse: Decodable {
 
         /// Nil for a live stream, anything over three minutes, or a video that
         /// doesn't name the place.
-        func toShort(about placeName: String) -> PlaceShort? {
+        func toShort(about place: Place, in city: City) -> PlaceShort? {
             guard let snippet, snippet.liveBroadcastContent ?? "none" == "none",
                   let seconds = contentDetails?.duration.flatMap(YouTubeService.seconds(fromISO8601:)),
                   (1...YouTubeService.longestSeconds).contains(seconds)
             else { return nil }
             let text = ([snippet.title, snippet.description ?? ""] + (snippet.tags ?? [])).joined(separator: " ")
-            guard YouTubeService.isAbout(placeName, text: text) else { return nil }
+            guard YouTubeService.isAccurateMatch(for: place, in: city, text: text) else { return nil }
             let thumbnail = snippet.thumbnails?["high"] ?? snippet.thumbnails?["medium"] ?? snippet.thumbnails?["default"]
             return PlaceShort(id: id, title: snippet.title, channel: snippet.channelTitle ?? "YouTube",
                               thumbnailURL: thumbnail.flatMap { URL(string: $0.url) },

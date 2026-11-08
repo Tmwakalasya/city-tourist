@@ -22,6 +22,11 @@ enum Secrets {
     /// row isn't shown. Kept out of source like the keys.
     static let feedbackEmail: String? = key("FeedbackEmail", orEnvironment: "FEEDBACK_EMAIL")
 
+    /// Optional: Claude API key for the AI Concierge feature in Build 3 beta.
+    static let anthropicAPIKey: String? = key("AnthropicAPIKey", orEnvironment: "ANTHROPIC_API_KEY")
+
+    static var hasAnthropicKey: Bool { anthropicAPIKey != nil }
+
     private static func key(_ name: String, orEnvironment variable: String) -> String? {
         if let url = Bundle.main.url(forResource: "Secrets", withExtension: "plist"),
            let data = try? Data(contentsOf: url),

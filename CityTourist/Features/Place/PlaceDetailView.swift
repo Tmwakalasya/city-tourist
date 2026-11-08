@@ -26,12 +26,13 @@ struct PlaceDetailView: View {
                 hero
                 VStack(alignment: .leading, spacing: 24) {
                     titleBlock
-                    Hairline()
                     factsRow
                     Hairline()
                     aboutBlock
-                    Hairline()
-                    tagsBlock
+                    if !place.tags.isEmpty {
+                        Hairline()
+                        tagsBlock
+                    }
                     Hairline()
                     mapBlock
                     if place.event == nil {
@@ -40,8 +41,19 @@ struct PlaceDetailView: View {
                     }
                 }
                 .padding(.horizontal, Metric.gutter)
-                .padding(.top, 24)
+                .padding(.top, 22)
                 .padding(.bottom, 32)
+                .background(
+                    Palette.canvas,
+                    in: UnevenRoundedRectangle(
+                        topLeadingRadius: 22,
+                        bottomLeadingRadius: 0,
+                        bottomTrailingRadius: 0,
+                        topTrailingRadius: 22,
+                        style: .continuous
+                    )
+                )
+                .padding(.top, -22)
             }
         }
         .background(Palette.canvas)
@@ -62,7 +74,15 @@ struct PlaceDetailView: View {
 
     private var hero: some View {
         PlacePhoto(place: place)
-            .frame(height: 380)
+            .frame(height: 360)
+            .overlay(alignment: .top) {
+                LinearGradient(
+                    colors: [.black.opacity(0.28), .clear],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 110)
+            }
             .clipped()
     }
 
@@ -74,7 +94,7 @@ struct PlaceDetailView: View {
             HStack(spacing: 10) {
                 ShareLink(item: shareText) {
                     Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Palette.ink)
                         .frame(width: 44, height: 44)
                         .background(.regularMaterial, in: Circle())
@@ -85,7 +105,7 @@ struct PlaceDetailView: View {
                     store.toggleSaved(place)
                 } label: {
                     Image(systemName: store.isSaved(place) ? "heart.fill" : "heart")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(store.isSaved(place) ? Brand.rausch : Palette.ink)
                         .frame(width: 44, height: 44)
                         .background(.regularMaterial, in: Circle())
@@ -108,27 +128,26 @@ struct PlaceDetailView: View {
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(place.name)
-                .font(.system(size: 26, weight: .semibold))
+                .font(.title.weight(.bold))
                 .tracking(-0.5)
                 .foregroundStyle(Palette.ink)
             Text("\(place.neighborhood), \(city.name)")
                 .metaStyle()
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 RatingLabel(rating: place.rating, reviewCount: place.reviewCount, size: 15)
+                if let status = place.openStatus {
+                    Text("·").foregroundStyle(Palette.inkFaint)
+                    Label(status, systemImage: "clock")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(place.isOpenNow == false ? Brand.rausch : Brand.babu)
+                }
             }
             .padding(.top, 2)
-
-            if let status = place.openStatus {
-                Label(status, systemImage: "clock")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(place.isOpenNow == false ? Brand.rausch : Brand.babu)
-                    .padding(.top, 4)
-            }
         }
     }
 
     private var factsRow: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 10) {
             fact(symbol: "clock", title: place.durationLabel, subtitle: "Typical visit")
             fact(symbol: "creditcard", title: place.priceLabel, subtitle: "Entry")
             fact(symbol: place.category.symbol, title: place.category.title, subtitle: "Category")
@@ -136,17 +155,21 @@ struct PlaceDetailView: View {
     }
 
     private func fact(symbol: String, title: String, subtitle: String) -> some View {
-        VStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
             Image(systemName: symbol)
-                .font(.system(size: 18, weight: .regular))
-                .foregroundStyle(Palette.ink)
-            Text(title)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Palette.ink)
-                .lineLimit(1)
-            Text(subtitle).captionStyle()
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Brand.rausch)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Palette.ink)
+                    .lineLimit(1)
+                Text(subtitle).captionStyle()
+            }
         }
-        .frame(maxWidth: .infinity)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private var aboutBlock: some View {
