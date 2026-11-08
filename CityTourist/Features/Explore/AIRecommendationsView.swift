@@ -1,4 +1,3 @@
-#if DEBUG && targetEnvironment(simulator)
 import SwiftUI
 
 struct AIRecommendationsView: View {
@@ -396,4 +395,3 @@ struct AIRecommendationsView: View {
         model.reset()
     }
 }
-#endif

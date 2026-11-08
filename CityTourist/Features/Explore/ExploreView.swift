@@ -11,9 +11,7 @@ struct ExploreView: View {
     @State private var isMapPresented = false
     @State private var placeToAdd: Place?
     @State private var selectedEvent: Place?
-    #if DEBUG && targetEnvironment(simulator)
     @State private var isAIPrototypePresented = false
-    #endif
 
     private var city: City { store.browsingCity }
 
@@ -34,9 +32,7 @@ struct ExploreView: View {
                 LazyVStack(alignment: .leading, spacing: Metric.cardGap) {
                     header
 
-                    #if DEBUG && targetEnvironment(simulator)
                     aiPreviewButton
-                    #endif
 
                     if !cityEvents.isEmpty {
                         happeningSection
@@ -92,9 +88,7 @@ struct ExploreView: View {
                     EventDetailView(place: event)
                 }
             }
-            #if DEBUG && targetEnvironment(simulator)
             .sheet(isPresented: $isAIPrototypePresented) { AIRecommendationsView(city: city) }
-            #endif
             .fullScreenCover(isPresented: $isMapPresented) {
                 CityMapView(city: city, places: results)
             }
@@ -143,7 +137,6 @@ struct ExploreView: View {
 
     // MARK: Header
 
-    #if DEBUG && targetEnvironment(simulator)
     private var aiPreviewButton: some View {
         Button { isAIPrototypePresented = true } label: {
             HStack(spacing: 14) {
@@ -189,7 +182,6 @@ struct ExploreView: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("exploreAIPrototype")
     }
-    #endif
 
     private var searchHeader: some View {
         VStack(spacing: 10) {

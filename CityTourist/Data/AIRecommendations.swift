@@ -1,4 +1,3 @@
-#if DEBUG
 import Foundation
 import CoreLocation
 import Observation
@@ -76,6 +75,7 @@ struct AIRecommendationResult {
 
 struct AIRecommendationService {
     var session: URLSession = .shared
+    var budget: RequestBudget? = nil
     static let endpoint = URL(string: "http://127.0.0.1:8767/api/recommendations")!
 
     struct Reply: Decodable {
@@ -89,14 +89,25 @@ struct AIRecommendationService {
     }
 
     enum Failure: LocalizedError {
-        case unavailable, invalidReply, rejected(String)
+        case unavailable, invalidReply, rateLimited, rejected(String)
         var errorDescription: String? {
             switch self {
-            case .unavailable: "The prototype connection is unavailable. Start the local relay on your Mac, then try again."
+            case .unavailable:
+                #if targetEnvironment(simulator)
+                "The prototype connection is unavailable. Start the local relay on your Mac, then try again."
+                #else
+                "AI Concierge is temporarily unavailable right now. Please try again in a moment."
+                #endif
             case .invalidReply: "The suggestions couldn’t be verified against these places. Please try again."
+            case .rateLimited: "AI Concierge has reached today’s 15-search beta limit on this device. Try again tomorrow."
             case .rejected(let message): message
             }
         }
+    }
+
+    static func isRateLimited(_ error: Error) -> Bool {
+        if case Failure.rateLimited = error { return true }
+        return false
     }
 
     /// Expands a natural-language craving or mood into focused search terms
@@ -253,21 +264,36 @@ struct AIRecommendationService {
 
     func recommend(query: String, city: City, candidates: [Place]) async throws -> AIRecommendationResult {
         try Task.checkCancellation()
+        let activeBudget = budget ?? (session === URLSession.shared ? .aiConcierge : .unlimited)
+        guard activeBudget.spend() else { throw Failure.rateLimited }
+
         let bounded = Array(candidates.prefix(20))
         let candidateDTOs = bounded.map { AIPlaceCandidate(place: $0, city: city) }
 
         // If AnthropicAPIKey is set in Secrets.plist or ANTHROPIC_API_KEY in the scheme,
-        // call the Anthropic Messages API directly from the simulator so no terminal
-        // relay or key copy-pasting is required.
+        // call the Anthropic Messages API directly so it works on physical TestFlight
+        // iPhones as well as simulators without needing a Mac localhost relay.
         if session === URLSession.shared, let directKey = Secrets.anthropicAPIKey {
-            return try await recommendDirectly(
-                apiKey: directKey,
-                query: query,
-                city: city.displayName,
-                candidates: candidateDTOs,
-                places: bounded
-            )
+            do {
+                return try await recommendDirectly(
+                    apiKey: directKey,
+                    query: query,
+                    city: city.displayName,
+                    candidates: candidateDTOs,
+                    places: bounded
+                )
+            } catch let error as URLError {
+                activeBudget.refund()
+                throw error
+            }
         }
+
+        #if !targetEnvironment(simulator)
+        if session === URLSession.shared {
+            activeBudget.refund()
+            throw Failure.unavailable
+        }
+        #endif
 
         struct Payload: Encodable {
             let query: String
@@ -287,7 +313,12 @@ struct AIRecommendationService {
         let response: URLResponse
         do { (data, response) = try await session.data(for: request) }
         catch let error as URLError where [.cannotConnectToHost, .cannotFindHost, .notConnectedToInternet].contains(error.code) {
+            activeBudget.refund()
             throw Failure.unavailable
+        }
+        catch let error as URLError {
+            activeBudget.refund()
+            throw error
         }
         try Task.checkCancellation()
         guard let http = response as? HTTPURLResponse else { throw Failure.invalidReply }
@@ -456,4 +487,3 @@ final class AIRecommendations {
         }
     }
 }
-#endif

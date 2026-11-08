@@ -1,4 +1,3 @@
-#if DEBUG
 import Testing
 import Foundation
 @testable import CityTourist
@@ -185,5 +184,30 @@ extension PlacesAPITests {
             } catch { #expect(error is AIRecommendationService.Failure) }
         }
     }
+
+    @Test func aiConciergeRespectsPerDeviceDailyBudget() async throws {
+        StubURLProtocol.reset()
+        let place = SampleData.places(in: "lisbon")[0]
+        let defaults = UserDefaults(suiteName: "AIRecommendationBudgetTests-\(UUID().uuidString)")!
+        let budget = RequestBudget(
+            name: "testAIConcierge",
+            limits: .init(perMinute: 5, perDay: 2),
+            defaults: defaults
+        )
+        let service = AIRecommendationService(session: StubURLProtocol.makeSession(), budget: budget)
+
+        for _ in 0..<2 {
+            StubURLProtocol.respond(json: """
+            {"summary":"Try this landmark.","picks":[{"id":"\(place.id)","reason":"A cultural stop.","caveat":""}]}
+            """)
+            _ = try await service.recommend(query: "culture", city: SampleData.cities[0], candidates: [place])
+        }
+
+        do {
+            _ = try await service.recommend(query: "culture", city: SampleData.cities[0], candidates: [place])
+            Issue.record("Expected third request to be blocked by daily RequestBudget")
+        } catch {
+            #expect(AIRecommendationService.isRateLimited(error))
+        }
+    }
 }
-#endif
