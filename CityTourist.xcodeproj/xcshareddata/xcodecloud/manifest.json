@@ -1,0 +1,9 @@
+{
+  "id" : "59cfe46e-3806-4caa-9b2c-32c43e86636f",
+  "targets" : [
+    {
+      "id" : "c67c70df-ebd9-4aa1-b1a7-d74fcf50d60c",
+      "name" : "CityTourist"
+    }
+  ]
+}

@@ -54,22 +54,22 @@ enum Metric {
 // tracking and Airbnb's weight/size ramp gets very close to the same texture.
 
 extension View {
-    /// Display title — the "Where to?" / screen-title scale.
+    /// Display title — the "Where to?" / screen-title scale (28pt bold).
     func displayStyle() -> some View {
-        font(.largeTitle.weight(.bold))
-            .tracking(-0.6)
+        font(.title.weight(.bold))
+            .tracking(-0.5)
             .foregroundStyle(Palette.ink)
     }
 
     func sectionTitleStyle() -> some View {
-        font(.title2.weight(.semibold))
-            .tracking(-0.4)
+        font(.title3.weight(.semibold))
+            .tracking(-0.3)
             .foregroundStyle(Palette.ink)
     }
 
     func cardTitleStyle() -> some View {
-        font(.subheadline.weight(.semibold))
-            .tracking(-0.1)
+        font(.headline)
+            .tracking(-0.2)
             .foregroundStyle(Palette.ink)
     }
 

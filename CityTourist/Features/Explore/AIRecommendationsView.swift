@@ -123,9 +123,7 @@ struct AIRecommendationsView: View {
             .foregroundStyle(Brand.rausch)
 
             Text("Your kind of \(city.name).")
-                .font(.largeTitle.weight(.bold))
-                .tracking(-0.8)
-                .foregroundStyle(Palette.ink)
+                .displayStyle()
                 .fixedSize(horizontal: false, vertical: true)
 
             Text("Describe a craving, a vibe, or a gap in your day — we’ll rank the best local fits.")

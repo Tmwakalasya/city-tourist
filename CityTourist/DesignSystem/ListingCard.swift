@@ -64,18 +64,18 @@ struct ListingCard: View {
                 // With live data the third line carries opening status; with
                 // sample data there is none, so it falls back to the area.
                 HStack(spacing: 5) {
-                    Text(place.durationLabel).metaStyle()
-                    Text("·").foregroundStyle(Palette.inkFaint)
+                    Text(place.durationLabel).captionStyle()
+                    Text("·").font(.footnote).foregroundStyle(Palette.inkFaint)
                     if let open = place.openLabel {
                         Text(open)
-                            .font(.subheadline.weight(.medium))
+                            .font(.footnote.weight(.medium))
                             .foregroundStyle(place.isOpenNow == false ? Brand.rausch : Brand.babu)
-                        Text("·").foregroundStyle(Palette.inkFaint)
+                        Text("·").font(.footnote).foregroundStyle(Palette.inkFaint)
                     }
-                    Text(place.neighborhood).metaStyle()
-                    Text("·").foregroundStyle(Palette.inkFaint)
+                    Text(place.neighborhood).captionStyle()
+                    Text("·").font(.footnote).foregroundStyle(Palette.inkFaint)
                     Text(place.priceLabel)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.footnote.weight(.semibold))
                         .foregroundStyle(Palette.ink)
                 }
                 .lineLimit(1)
