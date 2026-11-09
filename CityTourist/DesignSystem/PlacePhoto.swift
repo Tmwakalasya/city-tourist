@@ -125,7 +125,7 @@ struct PlacePhoto: View {
         switch category {
         case .food:
             ramps = [[0xF6C177, 0xE8743B, 0xB33951], [0xFFD9A0, 0xF08A5D, 0x9E2A2B]]
-        case .nature:
+        case .nature, .relaxation:
             ramps = [[0xBBE3C4, 0x4E9F6B, 0x1F4B3F], [0xD9E7A8, 0x6BA368, 0x244B36]]
         case .museum:
             ramps = [[0xE3D5F0, 0x9C7CC4, 0x4A3B6B], [0xF0E1E8, 0xB07CA8, 0x53355E]]

@@ -210,7 +210,7 @@ struct TripDetailView: View {
                                         .font(.caption2.weight(.bold))
                                         .tracking(0.6)
                                         .foregroundStyle(isSelected ? Palette.canvas.opacity(0.75) : Palette.inkMuted)
-                                    Text(day.date.formatted(.dateTime.weekday(.abbreviated).day()))
+                                    Text(day.date.formatted(.dateTime.locale(L10n.locale).weekday(.abbreviated).day()))
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundStyle(isSelected ? Palette.canvas : Palette.ink)
                                     if let forecast {
@@ -329,7 +329,7 @@ struct TripDetailView: View {
         let events = dayEvents.isEmpty ? fallbackEvents : dayEvents
         let showingFallback = dayEvents.isEmpty && !fallbackEvents.isEmpty
 
-        if !events.isEmpty {
+        if !events.isEmpty || eventCatalog.hasFailure(trip: trip) {
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(showingFallback ? "Happening during your trip" : "What's on")
@@ -354,6 +354,14 @@ struct TripDetailView: View {
                 }
             }
             .padding(.top, 28)
+            if eventCatalog.hasFailure(trip: trip) {
+                Text("Some event providers could not load. Available events are shown.").captionStyle().padding(.horizontal, Metric.gutter)
+            }
+            if eventCatalog.hasMore(trip: trip) {
+                Button("More events") {
+                    Task { await eventCatalog.load(trip: trip, city: CityDirectory.city(id: trip.cityID), more: true) }
+                }.padding(.horizontal, Metric.gutter)
+            }
         }
     }
 
@@ -551,7 +559,7 @@ struct TripDetailView: View {
 
     private func dayTitle(_ trip: Trip) -> String {
         guard trip.days.indices.contains(dayIndex) else { return "Day" }
-        return trip.days[dayIndex].date.formatted(.dateTime.weekday(.wide).month(.wide).day())
+        return trip.days[dayIndex].date.formatted(.dateTime.locale(L10n.locale).weekday(.wide).month(.wide).day())
     }
 
     /// What sits between two stops: how long the hop takes and whether the

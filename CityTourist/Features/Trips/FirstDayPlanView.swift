@@ -27,7 +27,7 @@ struct FirstDayPlanView: View {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("A first day in \(city.name)").displayStyle()
-                    Text(date.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())).metaStyle()
+                    Text(date.formatted(.dateTime.locale(L10n.locale).weekday(.wide).month(.abbreviated).day())).metaStyle()
                     Text("Start around the city centre. Pick what you enjoy and leave the timing to us.").metaStyle()
                 }
                 preferences
@@ -40,7 +40,7 @@ struct FirstDayPlanView: View {
                     }
                 }
                 if let message {
-                    Text(message).metaStyle().accessibilityIdentifier("firstDayMessage")
+                    Text(L10n.text(message)).metaStyle().accessibilityIdentifier("firstDayMessage")
                 }
             }
             .padding(Metric.gutter)

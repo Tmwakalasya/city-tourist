@@ -118,6 +118,6 @@ struct FixDaySheet: View {
     }
 
     private func dayLabel(_ date: Date) -> String {
-        date.formatted(.dateTime.weekday(.abbreviated).day())
+        date.formatted(.dateTime.locale(L10n.locale).weekday(.abbreviated).day())
     }
 }

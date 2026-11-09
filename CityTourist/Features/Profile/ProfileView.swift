@@ -1,11 +1,16 @@
 import SwiftUI
 import UserNotifications
+import PhotosUI
 
-/// Settings for this phone. There are no accounts yet, so trips and saved
-/// places live on the device; this says so rather than offering a sign-in
-/// that does nothing.
+/// Profile, account access and device preferences. Trips remain local to this phone.
 struct ProfileView: View {
     @Environment(AppStore.self) private var store
+    @Environment(AuthenticationStore.self) private var auth
+    @Environment(AvatarStore.self) private var avatar
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var editing = false
+    @State private var signingIn = false
+    @State private var name = ""
     @Environment(\.openURL) private var openURL
     @State private var copiedFeedbackAddress = false
 
@@ -13,9 +18,9 @@ struct ProfileView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
-                    Text("\(count(store.trips.count, "trip")) and \(count(store.savedPlaceIDs.count, "saved place")), kept on this \(UIDevice.current.model).")
-                        .metaStyle()
-
+                    profileHeader
+                    statistics
+                    travelStyle
                     settingsSection
                     aboutSection
                 }
@@ -25,12 +30,128 @@ struct ProfileView: View {
             }
             .background(Palette.canvas)
             .scrollIndicators(.hidden)
-            .navigationTitle("Settings")
+            .navigationTitle("Profile")
+            .sheet(isPresented: $signingIn) { PhoneSignInView() }
+            .alert("Edit profile", isPresented: $editing) {
+                TextField("Your name", text: $name)
+                Button("Save") {
+                    var profile = store.profile
+                    profile.displayName = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
+                    store.updateProfile(profile)
+                }
+                Button("Cancel", role: .cancel) { }
+            }
+            .task(id: auth.session?.user.id) { await avatar.load(auth: auth) }
+            .onChange(of: selectedPhoto) { _, photo in
+                Task {
+                    do {
+                        guard let data = try await photo?.loadTransferable(type: Data.self) else { return }
+                        await avatar.update(data, auth: auth)
+                    } catch { avatar.errorMessage = L10n.text("This photo could not be opened. Try another photo.") }
+                    selectedPhoto = nil
+                }
+            }
+        }
+    }
+
+    private var profileHeader: some View {
+        let profileImage = avatar.image
+        return VStack(spacing: 16) {
+            PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                ZStack(alignment: .bottomTrailing) {
+                    Group {
+                        if let image = profileImage {
+                            Image(uiImage: image).resizable().scaledToFill()
+                        } else {
+                            Text(initials).font(.system(size: 42, weight: .semibold))
+                                .foregroundStyle(Brand.rausch).frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .background(Brand.rausch.opacity(0.08))
+                        }
+                    }
+                    .frame(width: 116, height: 116).clipShape(Circle())
+                    .overlay(Circle().stroke(Brand.rausch, lineWidth: 3))
+                    Image(systemName: "camera.fill").foregroundStyle(.white).padding(10).background(.black, in: Circle())
+                }
+            }
+            .disabled(avatar.busy).accessibilityLabel(L10n.text("Change profile photo"))
+            if avatar.busy { ProgressView() }
+            Text(store.profile.displayName.isEmpty ? L10n.text("Your profile") : store.profile.displayName)
+                .font(.title.bold())
+            Label("City hopper", systemImage: "airplane")
+                .foregroundStyle(Brand.rausch).padding(.horizontal, 16).padding(.vertical, 7)
+                .background(Brand.rausch.opacity(0.1), in: Capsule())
+            Button {
+                name = store.profile.displayName; editing = true
+            } label: {
+                Label("Edit profile", systemImage: "pencil").font(.headline)
+                    .frame(maxWidth: .infinity).padding().foregroundStyle(.white).background(.black, in: Capsule())
+            }
+            if let error = avatar.errorMessage { Text(error).captionStyle().foregroundStyle(Brand.rausch) }
+        }
+        .padding(24).frame(maxWidth: .infinity)
+        .background(RoundedRectangle(cornerRadius: 24).stroke(Palette.hairline))
+    }
+
+    private var initials: String {
+        let result = store.profile.displayName.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined()
+        return result.isEmpty ? "CT" : result.uppercased()
+    }
+    private var statistics: some View {
+        HStack(spacing: 16) {
+            statistic(store.savedPlaceIDs.count, title: "Saved places", symbol: "heart", color: Brand.rausch)
+            statistic(store.trips.reduce(0) { $0 + $1.days.filter { !$0.stops.isEmpty }.count },
+                      title: "Days planned", symbol: "calendar", color: Brand.babu)
+        }
+    }
+    private func statistic(_ count: Int, title: String, symbol: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: symbol).font(.title2).foregroundStyle(color)
+            Text(count.formatted()).font(.largeTitle.bold())
+            Text(L10n.text(title)).metaStyle()
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(20).background(Palette.surface, in: RoundedRectangle(cornerRadius: 20))
+    }
+    private var travelStyle: some View {
+        let places = store.trips.flatMap { $0.days.flatMap(\.stops) }.compactMap { PlaceDirectory.place(id: $0.placeID) }
+        let categories = Dictionary(grouping: places, by: \.category)
+        return VStack(alignment: .leading, spacing: 16) {
+            Text("Your travel style").sectionTitleStyle()
+            Text(places.isEmpty ? L10n.text("Plan a day to discover your travel style.") : L10n.text("What your days are made of.")).metaStyle()
+            ForEach(PlaceCategory.allCases.filter { categories[$0] != nil }) { category in
+                let fraction = Double(categories[category]?.count ?? 0) / Double(max(1, places.count))
+                VStack(spacing: 8) {
+                    HStack {
+                        Label(category.title, systemImage: category.symbol)
+                        Spacer()
+                        Text(fraction, format: .percent.precision(.fractionLength(0)))
+                    }
+                    ProgressView(value: fraction).tint(Brand.rausch)
+                }
+            }
         }
     }
 
     private var settingsSection: some View {
-        row("Notifications", symbol: "bell") { openNotificationSettings() }
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Settings").sectionTitleStyle()
+            row("Notifications", symbol: "bell") { openNotificationSettings() }
+            Picker("Language", selection: Binding(get: { store.profile.language }, set: { value in
+                var profile = store.profile; profile.language = value; store.updateProfile(profile)
+            })) { ForEach(AppLanguage.allCases) { Text($0.title).tag($0) } }
+            Picker("Distance units", selection: Binding(get: { store.profile.distanceUnit }, set: { value in
+                var profile = store.profile; profile.distanceUnit = value; store.updateProfile(profile)
+            })) { ForEach(DistanceUnit.allCases) { Text($0.title).tag($0) } }
+            Text("Account").sectionTitleStyle().padding(.top, 12)
+            if let session = auth.session {
+                Text(session.user.phone.map { $0.hasPrefix("+") ? $0 : "+" + $0 } ?? L10n.text("Signed in")).metaStyle()
+                Button("Sign out") { Task { await auth.signOut() } }.disabled(auth.busy)
+            } else if auth.isConfigured {
+                row("Sign in with phone", symbol: "phone") { signingIn = true }
+            } else {
+                Text("Phone sign-in is not configured yet.").captionStyle()
+            }
+            Text("Trips and saved places stay on this device.").captionStyle()
+            if let error = auth.errorMessage { Text(error).captionStyle().foregroundStyle(Brand.rausch) }
+        }
     }
 
     private var aboutSection: some View {
@@ -53,7 +174,7 @@ struct ProfileView: View {
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text("City Tourist \(Self.version) · Beta").captionStyle()
-                Text("Places and opening hours from Google. Short videos from YouTube. Events from Ticketmaster. Weather from Open-Meteo. Travel times and directions from Apple Maps.")
+                Text("Places and opening hours from Google. Short videos from YouTube. Events from Ticketmaster and Eventbrite. Weather from Open-Meteo. Travel times and directions from Apple Maps.")
                     .captionStyle()
             }
             .padding(.top, 16)
@@ -97,10 +218,6 @@ struct ProfileView: View {
         return "\(version) (\(build))"
     }
 
-    private func count(_ n: Int, _ noun: String) -> String {
-        "\(n) \(noun)\(n == 1 ? "" : "s")"
-    }
-
     private func row(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 0) {
@@ -109,7 +226,7 @@ struct ProfileView: View {
                         .font(.system(size: 17, weight: .regular))
                         .foregroundStyle(Palette.ink)
                         .frame(width: 24)
-                    Text(title).bodyStyle()
+                    Text(L10n.text(title)).bodyStyle()
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 13, weight: .semibold))
@@ -125,5 +242,5 @@ struct ProfileView: View {
 
 #Preview {
     ProfileView().environment(AppStore(loadFromDisk: false))
-        .environment(PlaceCatalog())
+        .environment(PlaceCatalog()).environment(AuthenticationStore()).environment(AvatarStore())
 }

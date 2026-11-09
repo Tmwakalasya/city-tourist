@@ -18,6 +18,8 @@ struct CityTouristApp: App {
     @State private var routes = RouteStore()
     @State private var events = EventCatalog()
     @State private var shorts = PlaceShorts()
+    @State private var authentication = AuthenticationStore()
+    @State private var avatar = AvatarStore()
 
     var body: some Scene {
         WindowGroup {
@@ -25,6 +27,10 @@ struct CityTouristApp: App {
                 Color.clear
             } else {
                 RootTabView()
+                    .environment(\.locale, store.profile.language.locale)
+                    .environment(authentication)
+                    .environment(avatar)
+                    .task { await authentication.restoreSession() }
                     .environment(store)
                     .environment(catalog)
                     .environment(weather)

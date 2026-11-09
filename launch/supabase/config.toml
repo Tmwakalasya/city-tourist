@@ -1,0 +1,3 @@
+# Public, read-only discovery; shared quota enforced by the function, credentials stay on server.
+[functions.eventbrite]
+verify_jwt = false

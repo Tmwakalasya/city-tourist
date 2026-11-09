@@ -7,7 +7,7 @@ struct FirstDayPlanner {
     enum Pace: String, CaseIterable, Identifiable {
         case relaxed, balanced, busy
         var id: String { rawValue }
-        var title: String { rawValue.capitalized }
+        var title: String { L10n.text(rawValue.capitalized) }
         var slots: [Int] {
             switch self {
             case .relaxed: [600, 780, 900]
@@ -46,7 +46,7 @@ struct FirstDayPlanner {
         if let mustSee {
             guard candidates.contains(where: { $0.id == mustSee.id }) else { return [] }
             for slot in pace.slots where (slot == 780) == (mustSee.category == .food) {
-                if let anchor = scheduled([Suggestion(place: mustSee, start: slot, reason: "Your must-see")]) {
+                if let anchor = scheduled([Suggestion(place: mustSee, start: slot, reason: L10n.text("Your must-see"))]) {
                     result = anchor
                     anchorSlot = slot
                     break
@@ -65,7 +65,7 @@ struct FirstDayPlanner {
             }
             var best: (plan: [Suggestion], score: Double)?
             for place in options {
-                let reason = isLunch ? "A lunch break along your route" : "Matches your \(place.category.title.lowercased()) interest"
+                let reason = isLunch ? L10n.text("A lunch break along your route") : L10n.format("Matches your %@ interest", place.category.title.lowercased())
                 let draft = result + [Suggestion(place: place, start: slot, reason: reason)]
                 guard let plan = scheduled(draft.sorted { $0.start < $1.start }) else { continue }
                 let score = quality(place) - Double(travel(plan) - travel(result)) * 1.5
@@ -91,8 +91,8 @@ struct FirstDayPlanner {
         for place in options {
             var draft = proposal
             draft[index] = Suggestion(place: place, start: old.start,
-                                      reason: place.category == .food ? "A lunch break along your route"
-                                      : "Matches your \(place.category.title.lowercased()) interest")
+                                      reason: place.category == .food ? L10n.text("A lunch break along your route")
+                                      : L10n.format("Matches your %@ interest", place.category.title.lowercased()))
             guard let checked = scheduled(draft),
                   zip(checked, draft).allSatisfy({ $0.start == $1.start }) else { continue }
             let score = quality(place) - Double(travel(checked)) * 1.5

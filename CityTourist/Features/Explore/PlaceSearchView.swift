@@ -43,7 +43,7 @@ struct PlaceSearchView: View {
             candidates = catalogPlaces
         }
         return candidates.filter {
-            !excludedPlaceIDs.contains($0.id) && (hasQuery || category == nil || $0.category == category)
+            !excludedPlaceIDs.contains($0.id) && (category == nil || $0.category == category)
         }
     }
 
@@ -54,7 +54,7 @@ struct PlaceSearchView: View {
                     VStack(alignment: .leading, spacing: 5) {
                         Text("Around \(city.name)").sectionTitleStyle()
                         Text(catalog.isLiveDataAvailable
-                             ? "Find a name, food or activity within 50 km of the city centre."
+                             ? L10n.format("Find a name, food or activity within %@ of the city centre.", store.distance(50_000))
                              : "Searching sample places. Live search is unavailable.").captionStyle()
                     }
                     if hasQuery {
@@ -77,7 +77,7 @@ struct PlaceSearchView: View {
                 category = nil
                 resetSearch()
             }
-            .navigationTitle(title)
+            .navigationTitle(L10n.text(title))
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: Place.self) { PlaceDetailView(place: $0) }
             .toolbar {
@@ -160,7 +160,7 @@ struct PlaceSearchView: View {
             case .failed(let message):
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Couldn’t search places").cardTitleStyle()
-                    Text(message).metaStyle()
+                    Text(L10n.text(message)).metaStyle()
                     SecondaryButton(title: "Try again", systemImage: "arrow.clockwise") {
                         state = .loading
                         requestID = UUID()
@@ -234,8 +234,7 @@ struct PlaceSearchView: View {
     private func distanceLabel(for place: Place) -> String {
         let centre = CLLocation(latitude: city.coordinate.latitude, longitude: city.coordinate.longitude)
         let location = CLLocation(latitude: place.coordinate.latitude, longitude: place.coordinate.longitude)
-        let kilometres = (centre.distance(from: location) / 1_000).formatted(.number.precision(.fractionLength(1)))
-        return "\(kilometres) km from city centre · straight-line"
+        return L10n.format("%@ from city centre · straight-line", store.distance(centre.distance(from: location)))
     }
 
     private func resetSearch() {

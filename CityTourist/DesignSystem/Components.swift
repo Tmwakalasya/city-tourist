@@ -92,7 +92,7 @@ struct PrimaryButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title)
+            Text(L10n.text(title))
                 .font(.headline)
                 .multilineTextAlignment(.center)
                 .padding(.vertical, 14)
@@ -123,7 +123,7 @@ struct SecondaryButton: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 if let systemImage { Image(systemName: systemImage) }
-                Text(title)
+                Text(L10n.text(title))
             }
             .font(.headline)
             .multilineTextAlignment(.center)
@@ -151,7 +151,7 @@ struct CapsuleActionButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                Text(title).font(.subheadline.weight(.semibold))
+                Text(L10n.text(title)).font(.subheadline.weight(.semibold))
                 Image(systemName: systemImage).font(.subheadline.weight(.semibold))
             }
             .foregroundStyle(Palette.canvas)
@@ -192,7 +192,7 @@ struct Chip: View {
     var body: some View {
         HStack(spacing: 6) {
             if let systemImage { Image(systemName: systemImage).font(.footnote.weight(.medium)) }
-            Text(title).font(.subheadline.weight(isSelected ? .semibold : .regular))
+            Text(L10n.text(title)).font(.subheadline.weight(isSelected ? .semibold : .regular))
         }
         .foregroundStyle(isSelected ? Palette.canvas : Palette.ink)
         .padding(.horizontal, 14)
@@ -234,7 +234,7 @@ struct CategoryRail: View {
             VStack(spacing: 7) {
                 Image(systemName: symbol)
                     .font(.system(size: 20, weight: isSelected ? .medium : .regular))
-                Text(title)
+                Text(L10n.text(title))
                     .font(.caption.weight(isSelected ? .semibold : .regular))
                     .fixedSize()
                 Capsule()
@@ -267,14 +267,14 @@ struct SearchPill: View {
                         .foregroundStyle(Palette.ink)
                     VStack(alignment: .leading, spacing: 1) {
                         HStack(spacing: 5) {
-                            Text(title)
+                            Text(L10n.text(title))
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(Palette.ink)
                             Image(systemName: "chevron.down")
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(Palette.inkMuted)
                         }
-                        Text(subtitle)
+                        Text(L10n.text(subtitle))
                             .font(.caption)
                             .foregroundStyle(Palette.inkMuted)
                             .lineLimit(1)
@@ -333,7 +333,7 @@ struct SectionHeader: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(title).sectionTitleStyle()
+            Text(L10n.text(title)).sectionTitleStyle()
             Spacer()
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
@@ -375,11 +375,11 @@ struct EmptyStateView: View {
                 .font(.system(size: 40, weight: .light))
                 .foregroundStyle(Palette.inkFaint)
                 .padding(.bottom, 4)
-            Text(title)
+            Text(L10n.text(title))
                 .font(.title3.weight(.semibold))
                 .tracking(-0.3)
                 .foregroundStyle(Palette.ink)
-            Text(message)
+            Text(L10n.text(message))
                 .metaStyle()
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 300)

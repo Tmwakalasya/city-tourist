@@ -7,7 +7,8 @@ import Foundation
 /// So events are fetched when a trip is opened and kept in memory for the
 /// session, and a stop stores only the event's id, looked up again after a
 /// relaunch the way Google places are.
-struct TicketmasterService {
+struct TicketmasterService: EventProvider {
+    let providerID = "ticketmaster"
 
     enum ServiceError: LocalizedError {
         case http(status: Int)
@@ -58,6 +59,18 @@ struct TicketmasterService {
     /// event's local date.
     func events(near center: Coordinate, cityID: String, from start: Date, to end: Date,
                 calendar: Calendar = .current) async throws -> [Place] {
+        try await page(query: EventQuery(center: center, cityID: cityID, start: start, end: end), cursor: nil, calendar: calendar).events
+    }
+
+    func page(query: EventQuery, cursor: String?) async throws -> EventPage {
+        try await page(query: query, cursor: cursor, calendar: .current)
+    }
+
+    private func page(query: EventQuery, cursor: String?, calendar: Calendar) async throws -> EventPage {
+        guard query.isValid else { throw ServiceError.unusable }
+        let center = query.center, cityID = query.cityID, start = query.start, end = query.end
+        let index = cursor.flatMap(Int.init) ?? 0
+        guard (0..<10).contains(index) else { throw ServiceError.unusable }
         let first = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: start)) ?? start
         let last = calendar.date(byAdding: .day, value: 2, to: calendar.startOfDay(for: end)) ?? end
 
@@ -65,17 +78,20 @@ struct TicketmasterService {
         components.queryItems = [
             URLQueryItem(name: "apikey", value: apiKey),
             URLQueryItem(name: "geoPoint", value: Geohash.encode(latitude: center.latitude, longitude: center.longitude)),
-            URLQueryItem(name: "radius", value: String(Self.radiusKilometres)),
+            URLQueryItem(name: "radius", value: query.radiusMeters == 25_000 ? "25" : String(query.radiusMeters / 1000)),
             URLQueryItem(name: "unit", value: "km"),
             URLQueryItem(name: "startDateTime", value: Self.utc.string(from: first)),
             URLQueryItem(name: "endDateTime", value: Self.utc.string(from: last)),
             URLQueryItem(name: "sort", value: "date,asc"),
             URLQueryItem(name: "size", value: "100"),
+            URLQueryItem(name: "page", value: String(index)),
             URLQueryItem(name: "locale", value: "*")
         ]
         let data = try await get(components.url!)
         let page = try JSONDecoder().decode(SearchResponse.self, from: data)
-        return (page.embedded?.events ?? []).compactMap { $0.toPlace(cityID: cityID) }
+        let next = index + 1
+        return EventPage(events: (page.embedded?.events ?? []).compactMap { $0.value?.toPlace(cityID: cityID) },
+                         nextCursor: next < min(10, page.page?.totalPages ?? 1) ? String(next) : nil)
     }
 
     /// One event by its Ticketmaster id, for a stop restored after a relaunch.
@@ -94,7 +110,7 @@ struct TicketmasterService {
         guard budget.spend() else { throw ServiceError.rateLimited }
         let data: Data, response: URLResponse
         do {
-            (data, response) = try await session.data(from: url)
+            (data, response) = try await session.data(for: URLRequest(url: url, timeoutInterval: 20))
         } catch {
             budget.refund()
             throw ServiceError.transport(error)
@@ -115,9 +131,11 @@ struct TicketmasterService {
 // MARK: - Wire format
 
 private struct SearchResponse: Decodable {
-    struct Embedded: Decodable { let events: [TicketmasterEvent]? }
+    struct Pagination: Decodable { let totalPages: Int? }
+    let page: Pagination?
+    struct Embedded: Decodable { let events: [LossyElement<TicketmasterEvent>]? }
     let embedded: Embedded?
-    enum CodingKeys: String, CodingKey { case embedded = "_embedded" }
+    enum CodingKeys: String, CodingKey { case embedded = "_embedded", page }
 }
 
 private struct TicketmasterEvent: Decodable {
@@ -177,7 +195,7 @@ private struct TicketmasterEvent: Decodable {
     /// Nil for anything that can't go in a plan: no set time, called off, or
     /// nowhere to put on the map.
     func toPlace(cityID: String) -> Place? {
-        guard let id, let name,
+        guard let id, !id.isEmpty, let name, !name.isEmpty,
               let start = dates?.start, start.timeTBA != true, start.noSpecificTime != true,
               let localDate = start.localDate, let minute = Self.minute(start.localTime),
               !["cancelled", "postponed"].contains(dates?.status?.code ?? ""),
@@ -186,11 +204,13 @@ private struct TicketmasterEvent: Decodable {
               let longitude = venue.location?.longitude.flatMap(Double.init)
         else { return nil }
 
+        guard Coordinate(latitude: latitude, longitude: longitude).isValid else { return nil }
+
         let segment = classifications?.first?.segment?.name.flatMap(Self.meaningful)
         let genre = classifications?.first?.genre?.name.flatMap(Self.meaningful).flatMap { $0 == segment ? nil : $0 }
         let kind = [segment, genre].compactMap { $0 }.joined(separator: " · ")
         let venueName = venue.name ?? "Venue"
-        let info = EventInfo(ticketURL: url.flatMap(URL.init(string:)), localDate: localDate,
+        let info = EventInfo(ticketURL: Self.safeURL(url), localDate: localDate,
                              startMinute: minute, venue: venueName,
                              kind: kind.isEmpty ? "Event" : kind, price: Self.price(priceRanges?.first))
 
@@ -242,7 +262,12 @@ private struct TicketmasterEvent: Decodable {
         let pick = wide.filter { ($0.width ?? 0) >= 640 }.min { ($0.width ?? 0) < ($1.width ?? 0) }
             ?? wide.max { ($0.width ?? 0) < ($1.width ?? 0) }
             ?? images?.first
-        return pick?.url.flatMap(URL.init(string:))
+        return safeURL(pick?.url)
+    }
+
+    private static func safeURL(_ raw: String?) -> URL? {
+        guard let raw, let url = URL(string: raw), url.scheme == "https", url.host != nil else { return nil }
+        return url
     }
 
     /// "€25–€60", or "€25" when there's one price.

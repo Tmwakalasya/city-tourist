@@ -1,98 +1,90 @@
 import Foundation
 import Observation
 
-/// What's on near a trip's city during its dates.
-///
-/// Fetched once, when the trip is opened, and kept for the session:
-/// Ticketmaster's terms allow caching only for as long as the service needs
-/// it, and expect requests to answer what someone is doing. Without a
-/// Ticketmaster key there are simply no events.
-@MainActor
-@Observable
+/// Session-only cache. Each provider owns an independent cursor; failures never erase another's results.
+@MainActor @Observable
 final class EventCatalog {
-    /// trip id → day key → events that day, earliest first.
-    private var byTrip: [Trip.ID: [String: [Place]]] = [:]
-    private var loading: Set<Trip.ID> = []
-    /// city id → upcoming events over the next 14 days for the Explore feed.
-    private var byCity: [String: [Place]] = [:]
-    private var loadingCities: Set<String> = []
-
+    private var cityFeeds: [String: EventFeed] = [:]
+    private var tripFeeds: [Trip.ID: EventFeed] = [:]
+    private var loadingCities = Set<String>()
+    private var loadingTrips = Set<Trip.ID>()
     private let makeService: () -> TicketmasterService?
+    private let makeEventbrite: () -> EventbriteService?
 
-    /// Tests pass a client wired to a stubbed session.
-    init(makeService: @escaping () -> TicketmasterService? = { TicketmasterService() }) {
-        self.makeService = makeService
+    init(makeService: @escaping () -> TicketmasterService? = { TicketmasterService() },
+         makeEventbrite: @escaping () -> EventbriteService? = { EventbriteService() }) {
+        self.makeService = makeService; self.makeEventbrite = makeEventbrite
     }
-
+    private var aggregator: EventAggregator {
+        var providers: [any EventProvider] = []
+        if let service = makeService() { providers.append(service) }
+        if let service = makeEventbrite() { providers.append(service) }
+        return EventAggregator(providers: providers)
+    }
     func events(for trip: Trip, on date: Date) -> [Place] {
-        byTrip[trip.id]?[WeatherService.dayKey(for: date)] ?? []
+        allEvents(for: trip).filter { $0.event?.localDate == WeatherService.dayKey(for: date) }
     }
-
-    /// All events across any day of the trip, ordered chronologically.
     func allEvents(for trip: Trip) -> [Place] {
-        guard let map = byTrip[trip.id] else { return [] }
-        return map.keys.sorted().flatMap { map[$0] ?? [] }
+        let days = Set(trip.days.map { WeatherService.dayKey(for: $0.date) })
+        return (tripFeeds[trip.id]?.events ?? []).filter { $0.event.map { days.contains($0.localDate) } ?? false }
     }
-
-    /// Upcoming events in a city over the next two weeks, for Explore.
     func events(in cityID: String) -> [Place] {
-        byCity[cityID] ?? []
+        guard let feed = cityFeeds[cityID] else { return [] }
+        let first = WeatherService.dayKey(for: feed.query.start), last = WeatherService.dayKey(for: feed.query.end)
+        return feed.events.filter { $0.event.map { $0.localDate >= first && $0.localDate <= last } ?? false }
     }
-
-    func isLoading(cityID: String) -> Bool {
-        loadingCities.contains(cityID)
+    func isLoading(cityID: String) -> Bool { loadingCities.contains(cityID) }
+    func hasMore(cityID: String) -> Bool {
+        guard let feed = cityFeeds[cityID] else { return false }
+        return aggregator.providers.contains { !feed.completed.contains($0.providerID) }
     }
+    func hasMore(trip: Trip) -> Bool {
+        guard let feed = tripFeeds[trip.id] else { return false }
+        return aggregator.providers.contains { !feed.completed.contains($0.providerID) }
+    }
+    func hasFailure(cityID: String) -> Bool { !(cityFeeds[cityID]?.failed.isEmpty ?? true) }
+    func hasFailure(trip: Trip) -> Bool { !(tripFeeds[trip.id]?.failed.isEmpty ?? true) }
 
-    /// Loads the next 14 days of live events around a city for the Explore screen.
     func load(city: City, force: Bool = false) async {
-        guard (force || byCity[city.id] == nil),
-              !loadingCities.contains(city.id),
-              let service = makeService() else { return }
+        guard !loadingCities.contains(city.id) else { return }
+        if !force, let feed = cityFeeds[city.id], feed.failed.isEmpty { return }
         loadingCities.insert(city.id)
         defer { loadingCities.remove(city.id) }
-
-        let start = Date.now
-        let end = Calendar.current.date(byAdding: .day, value: 14, to: start) ?? start
-        guard let found = try? await service.events(near: city.coordinate, cityID: city.id,
-                                                     from: start, to: end)
-        else { return }
-
-        let todayKey = WeatherService.dayKey(for: start)
-        var seen = Set<String>()
-        let upcoming = found
-            .filter { place in
-                guard let info = place.event, info.localDate >= todayKey else { return false }
-                let dedupeKey = "\(place.name.localizedLowercase)|\(info.localDate)"
-                return seen.insert(dedupeKey).inserted
-            }
-            .sorted { a, b in
-                let da = a.event?.localDate ?? ""
-                let db = b.event?.localDate ?? ""
-                if da != db { return da < db }
-                return (a.event?.startMinute ?? 0) < (b.event?.startMinute ?? 0)
-            }
-
-        PlaceDirectory.register(upcoming)
-        byCity[city.id] = Array(upcoming.prefix(20))
+        let service = aggregator
+        guard !service.providers.isEmpty else { return }
+        let start = Date.now, end = Calendar.current.date(byAdding: .day, value: 14, to: start) ?? start
+        let previous = cityFeeds[city.id]
+        let initial = force ? nil : previous
+        let feed = await service.next(initial ?? EventFeed(query: EventQuery(center: city.coordinate, cityID: city.id, start: start, end: end)))
+        guard !Task.isCancelled else { return }
+        // A failed refresh keeps the last rendered results.
+        var final = feed
+        if force, !feed.failed.isEmpty, let previous {
+            let retained = previous.events.filter { feed.failed.contains($0.id.hasPrefix("eb:") ? "eventbrite" : "ticketmaster") }
+            final.events = EventAggregator.normalized(feed.events + retained)
+        }
+        cityFeeds[city.id] = final
+        PlaceDirectory.register(final.events)
     }
-
-    /// Once per trip per session. A failed fetch isn't remembered, so opening
-    /// the trip again tries again.
-    func load(trip: Trip, city: City) async {
-        guard byTrip[trip.id] == nil, !loading.contains(trip.id), let service = makeService() else { return }
-        loading.insert(trip.id)
-        defer { loading.remove(trip.id) }
-
-        guard let found = try? await service.events(near: city.coordinate, cityID: city.id,
-                                                     from: trip.startDate, to: trip.endDate)
-        else { return }
-
-        // The search window runs a day either side; keep only the trip's days.
-        let days = Set(trip.days.map { WeatherService.dayKey(for: $0.date) })
-        let onTrip = found.filter { $0.event.map { days.contains($0.localDate) } ?? false }
-        // Registered so a stop added from one resolves straight away.
-        PlaceDirectory.register(onTrip)
-        byTrip[trip.id] = Dictionary(grouping: onTrip) { $0.event?.localDate ?? "" }
-            .mapValues { $0.sorted { ($0.event?.startMinute ?? 0) < ($1.event?.startMinute ?? 0) } }
+    func loadMore(city: City) async {
+        guard !loadingCities.contains(city.id), let feed = cityFeeds[city.id] else { return }
+        loadingCities.insert(city.id)
+        defer { loadingCities.remove(city.id) }
+        let result = await aggregator.next(feed)
+        guard !Task.isCancelled else { return }
+        cityFeeds[city.id] = result; PlaceDirectory.register(result.events)
+    }
+    func load(trip: Trip, city: City, more: Bool = false) async {
+        guard !loadingTrips.contains(trip.id) else { return }
+        let query = EventQuery(center: city.coordinate, cityID: city.id, start: trip.startDate, end: trip.endDate)
+        let existing = tripFeeds[trip.id].flatMap { $0.query == query ? $0 : nil }
+        if !more, let existing, existing.failed.isEmpty { return }
+        loadingTrips.insert(trip.id)
+        defer { loadingTrips.remove(trip.id) }
+        let service = aggregator
+        guard !service.providers.isEmpty else { return }
+        let result = await service.next(existing ?? EventFeed(query: query))
+        guard !Task.isCancelled else { return }
+        tripFeeds[trip.id] = result; PlaceDirectory.register(result.events)
     }
 }

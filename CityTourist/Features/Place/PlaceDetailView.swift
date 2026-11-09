@@ -160,11 +160,11 @@ struct PlaceDetailView: View {
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Brand.rausch)
             VStack(alignment: .leading, spacing: 1) {
-                Text(title)
+                Text(L10n.text(title))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
-                Text(subtitle).captionStyle()
+                Text(L10n.text(subtitle)).captionStyle()
             }
         }
         .padding(12)

@@ -82,7 +82,7 @@ struct RunningLateSheet: View {
                         Button {
                             withAnimation(.snappy(duration: 0.18)) { delay = minutes }
                         } label: {
-                            Chip(title: "\(minutes) min", isSelected: delay == minutes)
+                            Chip(title: String(localized: "\(minutes) min", bundle: L10n.bundle, locale: L10n.locale), isSelected: delay == minutes)
                         }
                         .buttonStyle(.plain)
                     }

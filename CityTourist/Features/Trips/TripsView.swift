@@ -96,7 +96,7 @@ struct TripsView: View {
         if !trips.isEmpty {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
-                    Text(title).sectionTitleStyle()
+                    Text(L10n.text(title)).sectionTitleStyle()
                     Spacer()
                     if let onClear {
                         Button("Clear", action: onClear)

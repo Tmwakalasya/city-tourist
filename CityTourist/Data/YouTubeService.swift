@@ -152,6 +152,7 @@ struct YouTubeService {
             case .museum: ["museum", "art", "gallery", "exhibit"]
             case .nature: ["park", "beach", "garden", "view"]
             case .attraction, .activity: []
+            case .relaxation: ["spa", "wellness", "sauna", "relaxation", "massage", "yoga"]
             }
             let contextTokens = Set(cityWords + areaWords + categoryHints)
             if !contextTokens.isEmpty && !contextTokens.contains(where: { folded.contains($0) }) {

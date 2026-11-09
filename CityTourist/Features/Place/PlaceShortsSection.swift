@@ -124,7 +124,7 @@ struct PlaceShortsSection: View {
             .padding(.horizontal, -Metric.gutter)
         case .failed(let message):
             HStack(spacing: 12) {
-                Text(message).metaStyle()
+                Text(L10n.text(message)).metaStyle()
                 Spacer(minLength: 0)
                 Button("Try again") { Task { await shorts.load(place) } }
                     .font(.system(size: 14, weight: .semibold))
@@ -161,7 +161,7 @@ struct PlaceShortsSection: View {
 
     private func linkLabel(_ title: String) -> some View {
         HStack(spacing: 4) {
-            Text(title)
+            Text(L10n.text(title))
             Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .semibold))
         }
         .font(.system(size: 14, weight: .semibold))
@@ -287,7 +287,7 @@ struct ShortPlayerView: View {
             VStack(spacing: 14) {
                 Image(systemName: "wifi.exclamationmark").font(.title)
                 Text("Video unavailable").font(.headline)
-                Text(message).font(.subheadline).multilineTextAlignment(.center)
+                Text(L10n.text(message)).font(.subheadline).multilineTextAlignment(.center)
                 Button("Try again") { show(index) }.buttonStyle(.bordered)
             }
             .foregroundStyle(Palette.inkMuted)
