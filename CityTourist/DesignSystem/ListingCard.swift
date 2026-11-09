@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 /// The Explore feed card: full-bleed photo, heart in the corner, then a tight
 /// four-line stack of title, subtitle, meta and price — with the rating pulled
@@ -19,7 +20,7 @@ struct ListingCard: View {
                 .overlay(alignment: .topTrailing) {
                     HStack(spacing: 2) {
                         if let onAddToTrip {
-                            PhotoActionButton(systemImage: "calendar.badge.plus", label: "Add \(place.name) to trip", action: onAddToTrip)
+                            PhotoActionButton(systemImage: "calendar.badge.plus", label: String(localized: "Add \(place.name) to trip", bundle: L10n.bundle, locale: L10n.locale), action: onAddToTrip)
                         }
                         HeartButton(isSaved: isSaved, action: onToggleSaved)
                     }
@@ -56,6 +57,7 @@ struct ListingCard: View {
                     RatingLabel(rating: place.rating, reviewCount: place.reviewCount)
                         .fixedSize(horizontal: true, vertical: false)
                 }
+                PlaceDistanceLabel(place: place)
                 Text(place.blurb)
                     .metaStyle()
                     .lineLimit(1)
@@ -104,6 +106,18 @@ struct PlaceRow: View {
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(Palette.inkMuted)
             }
+        }
+    }
+}
+
+struct PlaceDistanceLabel: View {
+    let place: Place
+    @Environment(AppStore.self) private var store
+    var body: some View {
+        if let city = CityDirectory.knownCity(id: place.cityID), city.coordinate.isValid, place.coordinate.isValid {
+            let meters = CLLocation(latitude: city.coordinate.latitude, longitude: city.coordinate.longitude)
+                .distance(from: CLLocation(latitude: place.coordinate.latitude, longitude: place.coordinate.longitude))
+            Text(L10n.format("%@ from centre", store.distance(meters))).captionStyle()
         }
     }
 }

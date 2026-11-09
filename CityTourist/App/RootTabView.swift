@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct RootTabView: View {
+    @Environment(AuthenticationStore.self) private var authentication
     @Environment(AppStore.self) private var store
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
@@ -66,6 +67,7 @@ struct RootTabView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { isShowingIntro = false }
+            if phase == .active { Task { await authentication.restoreSession() } }
         }
         .onChange(of: reduceMotion) { _, enabled in
             if enabled { isShowingIntro = false }
@@ -86,7 +88,7 @@ struct RootTabView: View {
             Tab("Trips", systemImage: "airplane", value: TabID.trips) {
                 TripsView()
             }
-            Tab("Settings", systemImage: "gearshape", value: TabID.profile) {
+            Tab("Profile", systemImage: "person.crop.circle", value: TabID.profile) {
                 ProfileView()
             }
         }
@@ -96,7 +98,7 @@ struct RootTabView: View {
 
 #Preview {
     RootTabView().environment(AppStore(loadFromDisk: false))
-        .environment(PlaceCatalog())
+        .environment(PlaceCatalog()).environment(AuthenticationStore()).environment(AvatarStore())
         .environment(WeatherStore())
         .environment(RouteStore())
         .environment(PlaceShorts(makeService: { nil }, cacheURL: nil))

@@ -124,7 +124,7 @@ final class PlaceShorts {
                 ("Highlights", "best things to see"),
                 ("Tips", "tips before you go")
             ]
-        case .nature, .activity:
+        case .nature, .activity, .relaxation:
             return [
                 ("Vibe check", "views"),
                 ("Golden hour", "sunset"),

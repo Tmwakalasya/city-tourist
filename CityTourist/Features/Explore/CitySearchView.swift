@@ -73,7 +73,7 @@ struct CitySearchView: View {
     private var results: some View {
         // Always shown: a pick that fails to load must say so, not just do nothing.
         if let message = model.errorMessage, !model.isSearching {
-            Text(message)
+            Text(L10n.text(message))
                 .captionStyle()
                 .padding(.vertical, 8)
         }
@@ -137,7 +137,7 @@ struct CitySearchView: View {
 
     private func cityList(_ title: String, cities: [City]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
+            Text(L10n.text(title))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Palette.inkMuted)
                 .textCase(.uppercase)

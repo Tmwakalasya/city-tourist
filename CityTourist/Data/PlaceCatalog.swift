@@ -66,11 +66,14 @@ final class PlaceCatalog {
     private var loadedToday: Set<String> = []
 
     private let makeService: () -> GooglePlacesService?
+    private let makeEventbriteService: () -> EventbriteService?
     private let makeEventService: () -> TicketmasterService?
 
     /// Tests pass clients wired to a stubbed session.
     init(makeService: @escaping () -> GooglePlacesService? = { GooglePlacesService() },
-         makeEventService: @escaping () -> TicketmasterService? = { TicketmasterService() }) {
+         makeEventService: @escaping () -> TicketmasterService? = { TicketmasterService() },
+         makeEventbriteService: @escaping () -> EventbriteService? = { EventbriteService() }) {
+        self.makeEventbriteService = makeEventbriteService
         self.makeService = makeService
         self.makeEventService = makeEventService
     }
@@ -155,7 +158,8 @@ final class PlaceCatalog {
         // service's key, it can't be looked up at all.
         let google = makeService()
         let events = makeEventService()
-        let unreachable = missing.filter { $0.hasPrefix(Place.eventIDPrefix) ? events == nil : google == nil }
+        let eventbrite = makeEventbriteService()
+        let unreachable = missing.filter { $0.hasPrefix("eb:") ? eventbrite == nil : ($0.hasPrefix(Place.eventIDPrefix) ? events == nil : google == nil) }
         failedPlaceIDs.formUnion(unreachable)
         let fetchable = missing.subtracting(unreachable)
         guard !fetchable.isEmpty else { return }
@@ -169,6 +173,9 @@ final class PlaceCatalog {
             for id in fetchable {
                 group.addTask {
                     do {
+                        if id.hasPrefix("eb:"), let eventbrite {
+                            return (id, try await eventbrite.event(id: String(id.dropFirst(3)), cityID: cityID ?? ""), false)
+                        }
                         if id.hasPrefix(Place.eventIDPrefix), let events {
                             let eventID = String(id.dropFirst(Place.eventIDPrefix.count))
                             return (id, try await events.event(id: eventID, cityID: cityID ?? ""), false)
@@ -217,6 +224,8 @@ enum CityDirectory {
 
     /// Falls back to the first sample city so callers never have to unwrap.
     /// In practice every city a trip references is registered before use.
+    static func knownCity(id: String) -> City? { byID[id] }
+
     static func city(id: String) -> City {
         byID[id] ?? SampleData.cities[0]
     }

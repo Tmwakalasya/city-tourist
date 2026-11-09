@@ -11,6 +11,18 @@ import UserNotifications
 @Observable
 final class AppStore {
 
+    private(set) var profile = UserProfile()
+
+    func updateProfile(_ value: UserProfile) {
+        profile = value
+        UserDefaults.standard.set(value.language.rawValue, forKey: "displayLanguage")
+        persist()
+    }
+
+    func distance(_ meters: Double) -> String {
+        DistanceFormatting.string(meters: meters, unit: profile.distanceUnit.resolved(locale: .autoupdatingCurrent), locale: profile.language.locale)
+    }
+
     // MARK: State
 
     private(set) var trips: [Trip] = []
@@ -377,6 +389,7 @@ final class AppStore {
         var savedPlaceIDs: Set<String>
         var browsingCityID: String
         /// Optional so state written before city search still decodes.
+        var profile: UserProfile?
         var knownCities: [City]?
         /// Optional so state written before bookmarks recorded a city still decodes.
         var savedPlaceCityIDs: [String: String]?
@@ -386,7 +399,7 @@ final class AppStore {
         guard canPersist else { return }
         let state = State(trips: trips, savedPlaceIDs: savedPlaceIDs,
                           browsingCityID: browsingCityID,
-                          knownCities: knownCities, savedPlaceCityIDs: savedPlaceCityIDs)
+                          profile: profile, knownCities: knownCities, savedPlaceCityIDs: savedPlaceCityIDs)
         do {
             let data = try JSONEncoder().encode(state)
             try data.write(to: fileURL, options: .atomic)
@@ -414,6 +427,8 @@ final class AppStore {
     }
 
     private func restore(_ state: State) {
+        profile = state.profile ?? UserProfile()
+        UserDefaults.standard.set(profile.language.rawValue, forKey: "displayLanguage")
         trips = state.trips
         savedPlaceIDs = state.savedPlaceIDs
         savedPlaceCityIDs = state.savedPlaceCityIDs ?? [:]

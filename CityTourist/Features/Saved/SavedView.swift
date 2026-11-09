@@ -3,23 +3,11 @@ import SwiftUI
 struct SavedView: View {
     @Environment(AppStore.self) private var store
     @Environment(PlaceCatalog.self) private var catalog
-    @State private var selectedCityID: String?
+    @State private var grouping = SavedCityGroups()
+    @State private var collapsed = Set<String>()
     @State private var placeToAdd: Place?
 
     private let columns = [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
-
-    private var savedCities: [City] {
-        var seen = Set<String>()
-        return store.savedPlaces.compactMap { place in
-            guard seen.insert(place.cityID).inserted else { return nil }
-            return CityDirectory.city(id: place.cityID)
-        }
-    }
-
-    private var filteredPlaces: [Place] {
-        guard let selectedCityID else { return store.savedPlaces }
-        return store.savedPlaces.filter { $0.cityID == selectedCityID }
-    }
 
     var body: some View {
         NavigationStack {
@@ -44,7 +32,7 @@ struct SavedView: View {
             .navigationTitle("Saved")
             .navigationDestination(for: Place.self) { PlaceDetailView(place: $0) }
             .sheet(item: $placeToAdd) { AddToItinerarySheet(place: $0) }
-            .task { await resolveSaved() }
+            .task(id: store.savedPlaceIDs.sorted()) { await resolveSaved() }
         }
     }
 
@@ -54,13 +42,13 @@ struct SavedView: View {
         for (cityID, placeIDs) in store.savedPlaceIDsByCity {
             await catalog.resolve(placeIDs, cityID: cityID)
         }
+        await grouping.recover(store: store)
     }
 
     /// Saved places that haven't resolved yet: loading, or failed to load.
     @ViewBuilder
     private var unresolvedNote: some View {
         let missing = store.savedPlaceIDs.filter { PlaceDirectory.place(id: $0) == nil }
-        let noun = missing.count == 1 ? "place" : "places"
 
         if !missing.isEmpty {
             Group {
@@ -68,7 +56,7 @@ struct SavedView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle")
                             .font(.caption.weight(.semibold))
-                        Text("Couldn't load \(missing.count) saved \(noun).")
+                        Text(L10n.format("Couldn't load %lld saved places.", missing.count))
                             .font(.caption)
                         Button("Try again") { Task { await resolveSaved() } }
                             .font(.caption.weight(.semibold))
@@ -82,7 +70,7 @@ struct SavedView: View {
                 } else {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
-                        Text("Loading \(missing.count) saved \(noun)…").captionStyle()
+                        Text(L10n.format("Loading %lld saved places…", missing.count)).captionStyle()
                         Spacer(minLength: 0)
                     }
                 }
@@ -95,84 +83,95 @@ struct SavedView: View {
     private var grid: some View {
         ScrollView {
             unresolvedNote
-            if savedCities.count > 1 {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+            LazyVStack(alignment: .leading, spacing: 24, pinnedViews: [.sectionHeaders]) {
+                ForEach(grouping.sections(store: store)) { section in
+                    Section {
+                        if !collapsed.contains(section.id) {
+                            LazyVGrid(columns: columns, spacing: 24) {
+                                ForEach(section.placeIDs, id: \.self) { id in
+                                    if let place = PlaceDirectory.place(id: id) {
+                                        savedCard(place)
+                                    } else {
+                                        Label("Place unavailable", systemImage: "mappin.slash")
+                                            .captionStyle().frame(minHeight: 80)
+                                    }
+                                }
+                            }
+                        }
+                    } header: {
                         Button {
-                            withAnimation(.snappy(duration: 0.2)) { selectedCityID = nil }
+                            withAnimation {
+                                if !collapsed.insert(section.id).inserted { collapsed.remove(section.id) }
+                            }
                         } label: {
-                            Chip(title: "All (\(store.savedPlaces.count))", isSelected: selectedCityID == nil)
+                            HStack {
+                                Text(section.title).font(.headline)
+                                Text("(\(section.placeIDs.count))").foregroundStyle(.secondary)
+                                Spacer()
+                                Image(systemName: collapsed.contains(section.id) ? "chevron.down" : "chevron.up")
+                            }
+                            .padding(.vertical, 14).background(Palette.canvas)
                         }
                         .buttonStyle(.plain)
-
-                        ForEach(savedCities) { city in
-                            let count = store.savedPlaces.filter { $0.cityID == city.id }.count
-                            Button {
-                                withAnimation(.snappy(duration: 0.2)) { selectedCityID = city.id }
-                            } label: {
-                                Chip(title: "\(city.name) (\(count))", isSelected: selectedCityID == city.id)
-                            }
-                            .buttonStyle(.plain)
-                        }
+                        .accessibilityValue(L10n.text(collapsed.contains(section.id) ? "Collapsed" : "Expanded"))
                     }
-                    .padding(.horizontal, Metric.gutter)
-                }
-                .scrollClipDisabled()
-                .padding(.top, 8)
-            }
-            LazyVGrid(columns: columns, spacing: 24) {
-                ForEach(filteredPlaces) { place in
-                    NavigationLink(value: place) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            PlacePhoto(place: place)
-                                .aspectRatio(1, contentMode: .fit)
-                                .frame(maxWidth: .infinity)
-                                .clipShape(RoundedRectangle(cornerRadius: Metric.cardRadius, style: .continuous))
-                                .overlay(alignment: .topTrailing) {
-                                    HStack(spacing: 0) {
-                                        PhotoActionButton(
-                                            systemImage: "calendar.badge.plus",
-                                            label: "Add \(place.name) to trip",
-                                            size: 13
-                                        ) {
-                                            placeToAdd = place
-                                        }
-                                        HeartButton(isSaved: true, size: 20) { store.toggleSaved(place) }
-                                    }
-                                    .padding(6)
-                                }
-                                .overlay(alignment: .bottomLeading) {
-                                    Text(place.category.title)
-                                        .font(.caption2.weight(.semibold))
-                                        .foregroundStyle(Palette.onPhotoInk)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Palette.onPhoto.opacity(0.9), in: Capsule())
-                                        .padding(10)
-                                }
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(place.name).cardTitleStyle().lineLimit(1)
-                                HStack(spacing: 4) {
-                                    Text(CityDirectory.city(id: place.cityID).name).captionStyle()
-                                    if !place.neighborhood.isEmpty {
-                                        Text("·").foregroundStyle(Palette.inkFaint)
-                                        Text(place.neighborhood).captionStyle().lineLimit(1)
-                                    }
-                                }
-                                if place.rating > 0 {
-                                    RatingLabel(rating: place.rating, size: 12)
-                                }
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, Metric.gutter)
-            .padding(.top, 8)
             .padding(.bottom, 40)
         }
+        .refreshable {
+            await resolveSaved()
+            await grouping.recover(store: store, retry: true)
+        }
         .scrollIndicators(.hidden)
+    }
+
+    private func savedCard(_ place: Place) -> some View {
+        NavigationLink(value: place) {
+            VStack(alignment: .leading, spacing: 8) {
+                PlacePhoto(place: place)
+                    .aspectRatio(1, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: Metric.cardRadius, style: .continuous))
+                    .overlay(alignment: .topTrailing) {
+                        HStack(spacing: 0) {
+                            PhotoActionButton(
+                                systemImage: "calendar.badge.plus",
+                                label: String(localized: "Add \(place.name) to trip", bundle: L10n.bundle, locale: L10n.locale),
+                                size: 13
+                            ) {
+                                placeToAdd = place
+                            }
+                            HeartButton(isSaved: true, size: 20) { store.toggleSaved(place) }
+                        }
+                        .padding(6)
+                    }
+                    .overlay(alignment: .bottomLeading) {
+                        Text(place.category.title)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Palette.onPhotoInk)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Palette.onPhoto.opacity(0.9), in: Capsule())
+                            .padding(10)
+                    }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(place.name).cardTitleStyle().lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text(store.savedPlaceCityIDs[place.id].flatMap(CityDirectory.knownCity(id:))?.name ?? L10n.text("Unknown Location")).captionStyle()
+                        if !place.neighborhood.isEmpty {
+                            Text("·").foregroundStyle(Palette.inkFaint)
+                            Text(place.neighborhood).captionStyle().lineLimit(1)
+                        }
+                    }
+                    if place.rating > 0 {
+                        RatingLabel(rating: place.rating, size: 12)
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
 

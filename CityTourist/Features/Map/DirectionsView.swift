@@ -10,6 +10,7 @@ struct DirectionsView: View {
     /// Offered as a starting point when the trip has one.
     let lodging: Lodging?
 
+    @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
@@ -231,7 +232,7 @@ struct DirectionsView: View {
                 ProgressView(mode == .walking ? "Finding a walking route…" : "Finding a driving route…")
             case .failed(let message):
                 Text("Route unavailable").sectionTitleStyle()
-                Text(message).metaStyle()
+                Text(L10n.text(message)).metaStyle()
                 SecondaryButton(title: "Try route again", systemImage: "arrow.clockwise") { retryID = UUID() }
                 SecondaryButton(title: "Change starting point", systemImage: "magnifyingglass") { isChoosingStart = true }
                 mapsButton
@@ -334,8 +335,7 @@ struct DirectionsView: View {
     }
 
     private func distance(_ metres: Double) -> String {
-        Measurement(value: metres, unit: UnitLength.meters)
-            .formatted(.measurement(width: .abbreviated, usage: .road))
+        store.distance(metres)
     }
 
     private func duration(_ seconds: TimeInterval) -> String {

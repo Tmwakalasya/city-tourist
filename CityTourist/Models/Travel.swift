@@ -7,9 +7,9 @@ enum TravelMode: String, Codable, Hashable {
     /// Follows a number of minutes: "12 min walk", "20 min by transit".
     var verb: String {
         switch self {
-        case .walking: "walk"
-        case .driving: "drive"
-        case .transit: "by transit"
+        case .walking: L10n.text("walk")
+        case .driving: L10n.text("drive")
+        case .transit: L10n.text("by transit")
         }
     }
 
@@ -27,7 +27,7 @@ enum TravelMode: String, Codable, Hashable {
 enum GettingAround: String, Codable, CaseIterable, Hashable {
     case transit, car
 
-    var title: String { self == .transit ? "Walking and transit" : "Car" }
+    var title: String { L10n.text(self == .transit ? "Walking and transit" : "Car") }
     var symbol: String { self == .transit ? "tram.fill" : "car.fill" }
 }
 
@@ -57,7 +57,7 @@ struct TravelNote: Equatable {
     static func make(gapMinutes: Int, leg: TravelLeg?) -> TravelNote? {
         guard let leg else {
             guard gapMinutes >= 20 else { return nil }
-            return TravelNote(symbol: "clock", text: "\(duration(gapMinutes)) free", isTight: false)
+            return TravelNote(symbol: "clock", text: L10n.format("%@ free", duration(gapMinutes)), isTight: false)
         }
 
         let spare = gapMinutes - leg.minutes
@@ -65,14 +65,14 @@ struct TravelNote: Equatable {
 
         if spare < 0 {
             return TravelNote(symbol: leg.mode.symbol,
-                              text: "\(travel) · \(duration(-spare)) short",
+                              text: L10n.format("%@ · %@ short", travel, duration(-spare)),
                               isTight: true)
         }
         if spare == 0 {
-            return TravelNote(symbol: leg.mode.symbol, text: "\(travel) · just enough", isTight: false)
+            return TravelNote(symbol: leg.mode.symbol, text: L10n.format("%@ · just enough", travel), isTight: false)
         }
         return TravelNote(symbol: leg.mode.symbol,
-                          text: "\(travel) · \(duration(spare)) spare",
+                          text: L10n.format("%@ · %@ spare", travel, duration(spare)),
                           isTight: false)
     }
 

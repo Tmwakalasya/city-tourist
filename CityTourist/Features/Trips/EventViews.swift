@@ -67,7 +67,7 @@ struct EventCard: View {
         let parser = DateFormatter()
         parser.dateFormat = "yyyy-MM-dd"
         guard let date = parser.date(from: event.localDate) else { return time }
-        return "\(date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())) · \(time)"
+        return "\(date.formatted(.dateTime.locale(L10n.locale).weekday(.abbreviated).month(.abbreviated).day())) · \(time)"
     }
 }
 
@@ -121,7 +121,7 @@ struct EventDetailView: View {
                     if isPlanned(in: tripID, dayIndex: dayIndex) {
                         PrimaryButton(title: "On this day's plan", isEnabled: false) {}
                     } else {
-                        PrimaryButton(title: "Add to Day \(dayIndex + 1) at \(DayForecast.clockLabel(event.startMinute))") {
+                        PrimaryButton(title: String(localized: "Add to Day \(dayIndex + 1) at \(DayForecast.clockLabel(event.startMinute))", bundle: L10n.bundle, locale: L10n.locale)) {
                             // Booked: the planner works around it rather than moving it.
                             store.addStop(place: place, to: tripID, dayIndex: dayIndex,
                                           startMinute: event.startMinute, isBooked: true)
@@ -168,14 +168,14 @@ struct EventDetailView: View {
 
             if let url = event.ticketURL {
                 Link(destination: url) {
-                    Label("Tickets on Ticketmaster", systemImage: "arrow.up.right.square")
+                    Label(L10n.format("Tickets on %@", place.eventProvider), systemImage: "arrow.up.right.square")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Palette.ink)
                         .underline()
                 }
             }
 
-            Text("Event details from Ticketmaster. Times are the venue's local time.")
+            Text(L10n.format("Event details from %@. Times are the venue’s local time.", place.eventProvider))
                 .captionStyle()
         }
     }
@@ -191,7 +191,7 @@ struct EventDetailView: View {
         let parser = DateFormatter()
         parser.dateFormat = "yyyy-MM-dd"
         guard let date = parser.date(from: event.localDate) else { return time }
-        return "\(date.formatted(.dateTime.weekday(.wide).month(.wide).day())) · \(time)"
+        return "\(date.formatted(.dateTime.locale(L10n.locale).weekday(.wide).month(.wide).day())) · \(time)"
     }
 
     private func duration(_ minutes: Int) -> String {

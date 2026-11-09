@@ -107,7 +107,11 @@ struct GooglePlacesService {
         }
 
         let decoded = try JSONDecoder().decode(NearbyResponse.self, from: data)
-        return (decoded.places ?? []).compactMap { $0.toPlace(cityID: city.id, fallbackCategory: category) }
+        return (decoded.places ?? []).compactMap { place in
+            // Nearby can return broad or incomplete matches. Wellness requires positive type evidence.
+            if category == .relaxation && !Self.isWellness(types: place.types ?? []) { return nil }
+            return place.toPlace(cityID: city.id, fallbackCategory: category)
+        }
     }
 
     /// All six categories at once, deduped — one city's full catalogue.
@@ -344,18 +348,24 @@ struct GooglePlacesService {
         case .nature:     ["park", "garden", "national_park"]
         case .activity:   ["market", "shopping_mall", "amusement_park", "zoo"]
         case .nightlife:  ["bar", "night_club"]
+        case .relaxation: ["spa", "sauna", "wellness_center", "massage_spa", "yoga_studio"]
         }
+    }
+
+    static func isWellness(types: [String]) -> Bool {
+        !Set(types).isDisjoint(with: ["spa", "sauna", "wellness_center", "massage_spa", "yoga_studio"])
     }
 
     static func category(fromTypes types: [String], fallback: PlaceCategory) -> PlaceCategory {
         let set = Set(types)
+        if isWellness(types: types) { return .relaxation }
         if !set.isDisjoint(with: ["night_club", "bar", "pub", "wine_bar"]) { return .nightlife }
         if !set.isDisjoint(with: ["museum", "art_gallery", "performing_arts_theater"]) { return .museum }
         if !set.isDisjoint(with: ["restaurant", "cafe", "bakery", "meal_takeaway", "food"]) { return .food }
         if !set.isDisjoint(with: ["park", "garden", "national_park", "hiking_area", "beach"]) { return .nature }
         if !set.isDisjoint(with: ["tourist_attraction", "historical_landmark", "monument", "church", "place_of_worship"]) { return .attraction }
         if !set.isDisjoint(with: ["market", "shopping_mall", "amusement_park", "zoo"]) { return .activity }
-        return fallback
+        return fallback == .relaxation ? .activity : fallback
     }
 
     /// Google doesn't publish visit lengths, so we estimate from the category —
@@ -384,6 +394,7 @@ struct GooglePlacesService {
         case .nature:     60
         case .activity:   90
         case .nightlife:  110
+        case .relaxation: 90
         }
     }
 }

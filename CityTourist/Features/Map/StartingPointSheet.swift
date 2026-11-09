@@ -84,7 +84,7 @@ struct StartingPointSheet: View {
                         .foregroundStyle(Palette.inkMuted)
                         .frame(width: 28)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(title).cardTitleStyle().lineLimit(1)
+                        Text(L10n.text(title)).cardTitleStyle().lineLimit(1)
                         if !detail.isEmpty { Text(detail).captionStyle().lineLimit(1) }
                     }
                     Spacer(minLength: 8)

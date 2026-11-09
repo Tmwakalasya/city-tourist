@@ -151,7 +151,7 @@ struct TodayView: View {
                 .foregroundStyle(Brand.rausch)
                 .textCase(.uppercase)
                 .tracking(0.8)
-            Text(day.date.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+            Text(day.date.formatted(.dateTime.locale(L10n.locale).weekday(.wide).month(.wide).day()))
                 .sectionTitleStyle()
             if let forecast {
                 Label("\(forecast.summary) · \(forecast.temperatureLabel)", systemImage: forecast.symbol)

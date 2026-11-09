@@ -24,7 +24,8 @@ extension Place {
     /// the prefix says which service can look it up again.
     static let eventIDPrefix = "tm:"
 
-    var isEvent: Bool { id.hasPrefix(Self.eventIDPrefix) }
+    var isEvent: Bool { id.hasPrefix(Self.eventIDPrefix) || id.hasPrefix("eb:") }
+    var eventProvider: String { id.hasPrefix("eb:") ? "Eventbrite" : "Ticketmaster" }
 }
 
 /// Geohash encoding, the form Ticketmaster takes a search point in.

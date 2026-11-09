@@ -21,7 +21,7 @@ struct AddPlaceSheet: View {
     var body: some View {
         if let trip {
             PlaceSearchView(city: CityDirectory.city(id: trip.cityID),
-                            title: "Add to day \(dayIndex + 1)",
+                            title: String(localized: "Add to day \(dayIndex + 1)", bundle: L10n.bundle, locale: L10n.locale),
                             initialCategory: initialCategory,
                             excludedPlaceIDs: alreadyOnThisDay,
                             onAdd: add)

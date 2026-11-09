@@ -4,18 +4,19 @@ import CoreLocation
 // MARK: - Place
 
 enum PlaceCategory: String, Codable, CaseIterable, Identifiable, Hashable {
-    case attraction, food, museum, nature, activity, nightlife
+    case attraction, food, museum, nature, activity, nightlife, relaxation
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .attraction: "Landmarks"
-        case .food:       "Food"
-        case .museum:     "Museums"
-        case .nature:     "Outdoors"
-        case .activity:   "Things to do"
-        case .nightlife:  "Nightlife"
+        case .attraction: L10n.text("Landmarks")
+        case .food:       L10n.text("Food")
+        case .museum:     L10n.text("Museums")
+        case .nature:     L10n.text("Outdoors")
+        case .activity:   L10n.text("Things to do")
+        case .nightlife:  L10n.text("Nightlife")
+        case .relaxation: L10n.text("Relaxation & Wellness")
         }
     }
 
@@ -28,6 +29,7 @@ enum PlaceCategory: String, Codable, CaseIterable, Identifiable, Hashable {
         case .nature:     "leaf"
         case .activity:   "figure.walk"
         case .nightlife:  "wineglass"
+        case .relaxation: "leaf.circle"
         }
     }
 }
@@ -78,18 +80,18 @@ struct Place: Identifiable, Codable, Hashable {
     /// Short form for the feed card: "Open now" / "Closed".
     var openLabel: String? {
         guard let isOpenNow else { return nil }
-        return isOpenNow ? "Open now" : "Closed"
+        return L10n.text(isOpenNow ? "Open now" : "Closed")
     }
 
     /// "Open now · closes 6:00 PM" style status line, when we know it.
     var openStatus: String? {
         switch (isOpenNow, todayHours) {
         case let (.some(open), .some(hours)):
-            return open ? "Open now · \(hours)" : "Closed · \(hours)"
+            return L10n.format(open ? "Open now · %@" : "Closed · %@", hours)
         case let (.some(open), .none):
-            return open ? "Open now" : "Closed now"
+            return L10n.text(open ? "Open now" : "Closed now")
         case let (.none, .some(hours)):
-            return "Today \(hours)"
+            return L10n.format("Today %@", hours)
         default:
             return nil
         }
@@ -99,8 +101,8 @@ struct Place: Identifiable, Codable, Hashable {
 
     var durationLabel: String {
         let h = typicalMinutes / 60, m = typicalMinutes % 60
-        if h == 0 { return "\(m) min" }
-        return m == 0 ? "\(h) hr" : "\(h) hr \(m) min"
+        if h == 0 { return L10n.format("%d min", m) }
+        return m == 0 ? L10n.format("%d hr", h) : L10n.format("%d hr %d min", h, m)
     }
 }
 
@@ -153,7 +155,7 @@ struct ItineraryStop: Identifiable, Codable, Hashable {
         let date = Calendar.current.date(
             bySettingHour: startMinute / 60, minute: startMinute % 60, second: 0, of: .now
         ) ?? .now
-        return date.formatted(.dateTime.hour().minute())
+        return date.formatted(.dateTime.locale(L10n.locale).hour().minute())
     }
 }
 
@@ -185,7 +187,7 @@ struct ItineraryDay: Identifiable, Codable, Hashable {
 enum SharePermission: String, Codable, CaseIterable, Identifiable {
     case view, edit
     var id: String { rawValue }
-    var title: String { self == .view ? "Can view" : "Can edit" }
+    var title: String { L10n.text(self == .view ? "Can view" : "Can edit") }
 }
 
 struct Collaborator: Identifiable, Codable, Hashable {
@@ -223,10 +225,10 @@ struct Trip: Identifiable, Codable, Hashable {
     var dateRangeLabel: String {
         let cal = Calendar.current
         let sameMonth = cal.isDate(startDate, equalTo: endDate, toGranularity: .month)
-        let start = startDate.formatted(.dateTime.month(.abbreviated).day())
+        let start = startDate.formatted(.dateTime.locale(L10n.locale).month(.abbreviated).day())
         let end = sameMonth
-            ? endDate.formatted(.dateTime.day())
-            : endDate.formatted(.dateTime.month(.abbreviated).day())
+            ? endDate.formatted(.dateTime.locale(L10n.locale).day())
+            : endDate.formatted(.dateTime.locale(L10n.locale).month(.abbreviated).day())
         return "\(start) – \(end)"
     }
 

@@ -34,7 +34,7 @@ struct ExploreView: View {
 
                     aiPreviewButton
 
-                    if !cityEvents.isEmpty {
+                    if !cityEvents.isEmpty || eventCatalog.hasFailure(cityID: city.id) {
                         happeningSection
                     }
 
@@ -44,7 +44,7 @@ struct ExploreView: View {
                         EmptyStateView(
                             symbol: "magnifyingglass",
                             title: "No places match",
-                            message: "Try a different category, or clear the filters to see everything in \(city.name).",
+                            message: String(localized: "Try a different category, or clear the filters to see everything in \(city.name).", bundle: L10n.bundle, locale: L10n.locale),
                             actionTitle: "Clear filters"
                         ) {
                             withAnimation { category = nil }
@@ -133,6 +133,18 @@ struct ExploreView: View {
             }
         }
         .padding(.vertical, 4)
+        .safeAreaInset(edge: .bottom) {
+            VStack(alignment: .leading, spacing: 8) {
+                if eventCatalog.hasFailure(cityID: city.id) {
+                    Text("Some event providers could not load. Available events are shown.").captionStyle()
+                }
+                if eventCatalog.hasMore(cityID: city.id) {
+                    Button(eventCatalog.hasFailure(cityID: city.id) ? "Retry events" : "More events") {
+                        Task { await eventCatalog.loadMore(city: city) }
+                    }.disabled(eventCatalog.isLoading(cityID: city.id))
+                }
+            }
+        }
     }
 
     // MARK: Header

@@ -119,6 +119,7 @@ struct MapPlaceCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(place.name).cardTitleStyle().lineLimit(1)
                 Text(place.blurb).captionStyle().lineLimit(2)
+                PlaceDistanceLabel(place: place)
                 RatingLabel(rating: place.rating, reviewCount: place.reviewCount, size: 12)
                 Text("\(place.durationLabel) · \(place.priceLabel)").captionStyle()
             }

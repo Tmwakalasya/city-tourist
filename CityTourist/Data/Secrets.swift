@@ -6,6 +6,10 @@ import Foundation
 /// the scheme. Keys never go in source control — `Secrets.plist` is gitignored
 /// and `Secrets.example.plist` shows the shape.
 enum Secrets {
+    static let supabaseURL = key("SupabaseURL", orEnvironment: "SUPABASE_URL")
+    static let supabasePublishableKey = key("SupabasePublishableKey", orEnvironment: "SUPABASE_PUBLISHABLE_KEY")
+    static let eventbriteProxyURL = key("EventbriteProxyURL", orEnvironment: "EVENTBRITE_PROXY_URL")
+
     static let googlePlacesAPIKey: String? = key("GooglePlacesAPIKey", orEnvironment: "GOOGLE_PLACES_API_KEY")
 
     static var hasGooglePlacesKey: Bool { googlePlacesAPIKey != nil }
@@ -46,7 +50,7 @@ enum Secrets {
         }
         // 2. Match any non-standard row added to Secrets.plist (e.g., "New item", "AnthropicKey", "Claude").
         let standardKeys: Set<String> = [
-            "googleplacesapikey", "ticketmasterapikey", "youtubeapikey", "feedbackemail", "sharebaseurl"
+            "supabaseurl", "supabasepublishablekey", "eventbriteproxyurl", "googleplacesapikey", "ticketmasterapikey", "youtubeapikey", "feedbackemail", "sharebaseurl"
         ]
         for (dictKey, dictValue) in plist where !standardKeys.contains(dictKey.localizedLowercase) {
             if let strVal = dictValue as? String, isUsable(strVal) {

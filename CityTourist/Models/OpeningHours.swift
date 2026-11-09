@@ -95,20 +95,20 @@ struct HoursNote: Equatable {
         if let open = today.span(containing: startMinute) {
             guard departure > open.end else { return nil }
             return HoursNote(symbol: "clock.badge.exclamationmark",
-                             text: "closes \(clock(open.end)), before you leave")
+                             text: L10n.format("closes %@, before you leave", clock(open.end)))
         }
 
         // Closed on arrival: say what the place does that day instead.
         guard !today.openings.isEmpty else {
-            return HoursNote(symbol: "xmark.circle", text: "closed on \(weekdayNames[weekday])s")
+            return HoursNote(symbol: "xmark.circle", text: L10n.format("closed on %@s", L10n.text(weekdayNames[weekday])))
         }
         if let next = today.nextOpening(after: startMinute) {
             return HoursNote(symbol: "clock.badge.exclamationmark",
-                             text: "not open until \(clock(next.start))")
+                             text: L10n.format("not open until %@", clock(next.start)))
         }
         let lastClose = today.openings.map(\.end).max() ?? startMinute
         return HoursNote(symbol: "clock.badge.exclamationmark",
-                         text: "closes \(clock(lastClose)), before you arrive")
+                         text: L10n.format("closes %@, before you arrive", clock(lastClose)))
     }
 
     /// Wraps minutes from the night before or into tomorrow onto the clock.

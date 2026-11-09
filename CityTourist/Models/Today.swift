@@ -44,9 +44,9 @@ struct LeaveBy: Equatable {
     /// "Leave in 12 min", "Leave now", or "8 min behind".
     func countdown(at now: Int) -> String {
         let left = minute - now
-        if left > 0 { return "Leave in \(Self.duration(left))" }
+        if left > 0 { return L10n.format("Leave in %@", Self.duration(left)) }
         let behind = minutesBehind(at: now)
-        return behind > 0 ? "\(Self.duration(behind)) behind" : "Leave now"
+        return behind > 0 ? L10n.format("%@ behind", Self.duration(behind)) : L10n.text("Leave now")
     }
 
     private static func duration(_ minutes: Int) -> String {

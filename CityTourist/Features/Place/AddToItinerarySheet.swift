@@ -45,7 +45,7 @@ struct AddToItinerarySheet: View {
             .safeAreaInset(edge: .bottom) {
                 if !eligibleTrips.isEmpty {
                     StickyBottomBar {
-                        PrimaryButton(title: "Add to \(selectedTrip?.title ?? "trip")",
+                        PrimaryButton(title: String(localized: "Add to \(selectedTrip?.title ?? "trip")", bundle: L10n.bundle, locale: L10n.locale),
                                       isEnabled: selectedTrip != nil) {
                             addStop()
                         }
@@ -69,7 +69,7 @@ struct AddToItinerarySheet: View {
             Spacer()
             EmptyStateView(
                 symbol: "suitcase",
-                title: "No \(CityDirectory.city(id: place.cityID).name) trip yet",
+                title: String(localized: "No \(CityDirectory.city(id: place.cityID).name) trip yet", bundle: L10n.bundle, locale: L10n.locale),
                 message: "Create a trip with your dates and this place will be the first thing on it.",
                 actionTitle: "Plan a trip"
             ) {
@@ -141,7 +141,7 @@ struct AddToItinerarySheet: View {
                                 }
                             } label: {
                                 Chip(
-                                    title: "Day \(index + 1) · \(day.date.formatted(.dateTime.weekday(.abbreviated).day()))",
+                                    title: String(localized: "Day \(index + 1) · \(day.date.formatted(.dateTime.locale(L10n.locale).weekday(.abbreviated).day()))", bundle: L10n.bundle, locale: L10n.locale),
                                     isSelected: selectedDayIndex == index
                                 )
                             }

@@ -155,7 +155,7 @@ struct AIRecommendationsView: View {
                     withAnimation(.snappy(duration: 0.18)) { walkableOnly.toggle() }
                     if !submittedQuery.isEmpty { submit() }
                 } label: {
-                    Chip(title: "Near centre (<3 km)", systemImage: "figure.walk", isSelected: walkableOnly)
+                    Chip(title: L10n.format("Near centre (<%@)", store.distance(3_000)), systemImage: "figure.walk", isSelected: walkableOnly)
                 }
                 .buttonStyle(.plain)
 
@@ -248,7 +248,7 @@ struct AIRecommendationsView: View {
         case .failed(let message):
             VStack(alignment: .leading, spacing: 10) {
                 Label("Couldn’t find your picks", systemImage: "exclamationmark.circle").cardTitleStyle()
-                Text(message).metaStyle()
+                Text(L10n.text(message)).metaStyle()
                 SecondaryButton(title: "Try again", systemImage: "arrow.clockwise") { submit() }
             }
         case .ready:
@@ -308,7 +308,7 @@ struct AIRecommendationsView: View {
                         HStack(spacing: 5) {
                             Text(pick.place.neighborhood).captionStyle().lineLimit(1)
                             Text("·").foregroundStyle(Palette.inkFaint)
-                            Text("\(distance(for: pick.place)) km from centre").captionStyle()
+                            Text(L10n.format("%@ from centre", distance(for: pick.place))).captionStyle()
                             if let open = pick.place.openLabel {
                                 Text("·").foregroundStyle(Palette.inkFaint)
                                 Text(open)
@@ -379,7 +379,7 @@ struct AIRecommendationsView: View {
 
     private func distance(for place: Place) -> String {
         let metres = AIPlaceCandidate(place: place, city: city).distanceMetresFromCentre
-        return (Double(metres) / 1000).formatted(.number.precision(.fractionLength(1)))
+        return store.distance(Double(metres))
     }
 
     private func submit() {
