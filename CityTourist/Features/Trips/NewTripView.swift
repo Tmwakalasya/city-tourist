@@ -10,6 +10,7 @@ struct NewTripView: View {
     @State private var city: City?
     @State private var title = ""
     @State private var isPlanningFirstDay = false
+    @State private var isBuildingTrip = false
     @State private var startDate = Calendar.current.date(byAdding: .day, value: 7, to: .now) ?? .now
     @State private var endDate = Calendar.current.date(byAdding: .day, value: 10, to: .now) ?? .now
 
@@ -26,7 +27,7 @@ struct NewTripView: View {
                 VStack(alignment: .leading, spacing: 28) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Where are you going?").displayStyle()
-                        Text("Get a suggested first day, or start with an empty itinerary.")
+                        Text("Have the whole trip planned around what you like, or start with an empty itinerary.")
                             .metaStyle()
                     }
 
@@ -49,19 +50,28 @@ struct NewTripView: View {
             .safeAreaInset(edge: .bottom) {
                 StickyBottomBar {
                     VStack(spacing: 12) {
-                        PrimaryButton(title: "Plan my first day", isEnabled: city != nil && endDate >= startDate) {
-                            isPlanningFirstDay = true
+                        PrimaryButton(title: "Plan my whole trip", isEnabled: city != nil && endDate >= startDate) {
+                            isBuildingTrip = true
                         }
-                        Button("Create empty itinerary") { createTrip(stops: []) }
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Palette.ink)
-                            .disabled(city == nil || endDate < startDate)
+                        .accessibilityIdentifier("planWholeTripButton")
+                        HStack(spacing: 24) {
+                            Button("Just the first day") { isPlanningFirstDay = true }
+                            Button("Create empty itinerary") { createTrip(days: []) }
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Palette.ink)
+                        .disabled(city == nil || endDate < startDate)
                     }
                 }
             }
             .navigationDestination(isPresented: $isPlanningFirstDay) {
                 if let city {
-                    FirstDayPlanView(city: city, date: startDate) { createTrip(stops: $0) }
+                    FirstDayPlanView(city: city, date: startDate) { createTrip(days: [$0]) }
+                }
+            }
+            .navigationDestination(isPresented: $isBuildingTrip) {
+                if let city {
+                    TripBuilderView(city: city, startDate: startDate, endDate: endDate) { createTrip(days: $0) }
                 }
             }
         }
@@ -72,12 +82,16 @@ struct NewTripView: View {
         }
     }
 
-    private func createTrip(stops: [ItineraryStop]) {
+    /// `days` holds the stops planned for each day from the first; days
+    /// beyond it start empty.
+    private func createTrip(days: [[ItineraryStop]]) {
         guard let city, endDate >= startDate else { return }
         var trip = store.createTrip(city: city, start: startDate, end: endDate,
                                     title: title.trimmingCharacters(in: .whitespaces))
-        if !stops.isEmpty, !trip.days.isEmpty {
-            trip.days[0].stops = stops
+        if days.contains(where: { !$0.isEmpty }) {
+            for (index, stops) in days.enumerated() where trip.days.indices.contains(index) {
+                trip.days[index].stops = stops
+            }
             store.update(trip)
         }
         onCreate?(trip)
