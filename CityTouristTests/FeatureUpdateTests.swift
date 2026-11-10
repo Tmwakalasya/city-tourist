@@ -269,7 +269,34 @@ struct AdditionalLanguageTests {
         for (code, title) in [("fr", "Profil"), ("pt", "Perfil"), ("de", "Profil"), ("it", "Profilo"), ("ja", "プロフィール"), ("zh-Hans", "个人资料")] {
             #expect(L10n.text("Profile", locale: Locale(identifier: code)) == title)
         }
-        #expect(L10n.text("Weather.Clear", locale: Locale(identifier: "fr")) == "Clear")
+        #expect(L10n.text("Weather.Clear", locale: Locale(identifier: "fr")) == "Dégagé")
+        #expect(L10n.text("Weather.Clear", locale: Locale(identifier: "ko")) == "Clear",
+                "a language without its own file reads the English value, not the key")
+    }
+
+    /// A string added in English has to arrive in every language with it, with
+    /// the same values to fill in, or that screen turns up half-translated.
+    @Test func everyLanguageTranslatesEveryEnglishString() throws {
+        func strings(_ code: String) throws -> [String: String] {
+            let path = try #require(Bundle.main.path(forResource: "Localizable", ofType: "strings",
+                                                     inDirectory: nil, forLocalization: code))
+            return try #require(NSDictionary(contentsOfFile: path) as? [String: String])
+        }
+        func placeholders(_ text: String) -> [String] {
+            let pattern = try! NSRegularExpression(pattern: #"%(?:\d+\$)?(@|lld|d)"#)
+            let range = NSRange(text.startIndex..., in: text)
+            return pattern.matches(in: text, range: range)
+                .compactMap { Range($0.range(at: 1), in: text).map { String(text[$0]) } }.sorted()
+        }
+        let english = try strings("en")
+        for code in ["es", "fr", "de", "it", "pt", "ja", "zh-Hans"] {
+            let translated = try strings(code)
+            let missing = english.keys.filter { translated[$0] == nil }.sorted()
+            #expect(missing.isEmpty, "\(code) is missing \(missing.count): \(missing.prefix(3))")
+            for (key, value) in translated where english[key] != nil {
+                #expect(placeholders(key) == placeholders(value), "\(code): \(key)")
+            }
+        }
     }
 }
 

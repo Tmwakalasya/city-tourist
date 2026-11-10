@@ -239,8 +239,8 @@ struct TripBuilderTests {
 
         #expect(picked.count == 12)
         #expect(picked.prefix(4).map(\.id) == ["found-0", "found-1", "found-2", "found-3"])
-        #expect(picked.dropFirst(4).filter { $0.category == .food }.count == 4)
-        #expect(picked.dropFirst(4).filter { $0.category == .nature }.count == 4)
+        #expect(picked.dropFirst(4).filter { $0.category == .food }.count == 6, "food comes round twice")
+        #expect(picked.dropFirst(4).filter { $0.category == .nature }.count == 2)
         #expect(Set(picked.map(\.id)).count == 12)
         #expect(!picked.contains { $0.id == "gig" })
     }
@@ -396,6 +396,7 @@ extension PlacesAPITests {
         let message = try #require((body["messages"] as? [[String: Any]])?.first?["content"] as? String)
         let payload = try #require(JSONSerialization.jsonObject(with: Data(message.utf8)) as? [String: Any])
         #expect(payload["request"] as? String == "Slow mornings")
+        #expect(payload["language"] as? String == "English")
         let days = try #require(payload["days"] as? [[String: Any]])
         #expect(days.map { $0["weekday"] as? String } == ["Monday", "Tuesday"])
         #expect(days.first?["date"] as? String == "2026-10-12")

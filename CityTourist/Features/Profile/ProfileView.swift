@@ -174,7 +174,7 @@ struct ProfileView: View {
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text("City Tourist \(Self.version) · Beta").captionStyle()
-                Text("Places and opening hours from Google. Short videos from YouTube. Events from Ticketmaster and Eventbrite. Weather from Open-Meteo. Travel times and directions from Apple Maps.")
+                Text("Places and opening hours from Google. Short videos from YouTube. Events from Ticketmaster and Eventbrite. Weather from Open-Meteo. Travel times and directions from Apple Maps. AI suggestions and trip plans from Claude, by Anthropic.")
                     .captionStyle()
             }
             .padding(.top, 16)
