@@ -75,6 +75,8 @@ final class AppStore {
         if loadFromDisk {
             do {
                 if let state = try Self.load(from: fileURL) { restore(state) }
+                // Trips made before trip reminders existed get theirs.
+                syncTripReminders()
             } catch {
                 canPersist = false
                 storageIssue = .unreadable
@@ -138,6 +140,7 @@ final class AppStore {
         )
         trips.insert(trip, at: 0)
         persist()
+        reminders.allowQuietDelivery()
         return trip
     }
 
@@ -154,6 +157,7 @@ final class AppStore {
         if let undo = pendingUndo, ids.contains(undo.tripID) { pendingUndo = nil }
         persist()
         stops.forEach(cancelReminder)
+        reminders.cancel(identifiers: ids.map(Self.tripReminderID))
     }
 
     func update(_ trip: Trip) {
@@ -331,6 +335,38 @@ final class AppStore {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
+    static func tripReminderID(_ id: Trip.ID) -> String { "trip-\(id.uuidString)" }
+
+    /// At six the evening before a trip starts: that it's tomorrow, and what
+    /// comes first. Rescheduled with every save, so it follows the plan. It's
+    /// delivered quietly unless notifications have been allowed in full.
+    private func syncTripReminders() {
+        let calendar = Calendar.current
+        for trip in trips {
+            let identifier = Self.tripReminderID(trip.id)
+            reminders.cancel(identifiers: [identifier])
+            guard let eve = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: trip.startDate)),
+                  let fireDate = calendar.date(bySettingHour: 18, minute: 0, second: 0, of: eve),
+                  fireDate > .now
+            else { continue }
+
+            let content = UNMutableNotificationContent()
+            content.title = L10n.format("%@ starts tomorrow", trip.title)
+            let first = trip.days.first?.stops.min { $0.startMinute < $1.startMinute }
+            if let first, let place = PlaceDirectory.place(id: first.placeID) {
+                content.body = L10n.format("First up: %@ at %@.", place.name, first.timeLabel)
+            } else {
+                content.body = L10n.text("Nothing is planned for the first day yet. Open the trip to add a stop.")
+            }
+            content.sound = .default
+            reminders.schedule(UNNotificationRequest(
+                identifier: identifier, content: content,
+                trigger: UNCalendarNotificationTrigger(
+                    dateMatching: calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate),
+                    repeats: false)))
+        }
+    }
+
     /// Reschedules every reminder on a day for when to set off.
     private func syncReminders(for trip: Trip, dayIndex: Int) {
         guard trip.days.indices.contains(dayIndex) else { return }
@@ -396,6 +432,7 @@ final class AppStore {
     }
 
     private func persist() {
+        syncTripReminders()
         guard canPersist else { return }
         let state = State(trips: trips, savedPlaceIDs: savedPlaceIDs,
                           browsingCityID: browsingCityID,
@@ -455,15 +492,34 @@ final class AppStore {
 protocol ReminderScheduling {
     func schedule(_ request: UNNotificationRequest)
     func cancel(identifiers: [String])
+    /// Asks to deliver quietly, to Notification Centre only, which iOS grants
+    /// without interrupting anyone with a prompt.
+    func allowQuietDelivery()
+}
+
+extension ReminderScheduling {
+    func allowQuietDelivery() {}
 }
 
 struct SystemReminders: ReminderScheduling {
     func schedule(_ request: UNNotificationRequest) {
+        // A test host has no business leaving notifications on the simulator.
+        guard !CityTouristApp.isRunningTests else { return }
         UNUserNotificationCenter.current().add(request)
     }
 
     func cancel(identifiers: [String]) {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
+    }
+
+    func allowQuietDelivery() {
+        guard !CityTouristApp.isRunningTests else { return }
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            // Only when nothing has been decided: a full yes or a no stands.
+            guard settings.authorizationStatus == .notDetermined else { return }
+            center.requestAuthorization(options: [.alert, .sound, .provisional]) { _, _ in }
+        }
     }
 }
 

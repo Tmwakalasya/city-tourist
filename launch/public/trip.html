@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shared itinerary · City Tourist</title>
+<meta name="description" content="A day-by-day itinerary shared from City Tourist.">
+<meta name="theme-color" content="#ffffff">
+<style>
+  :root{
+    --rausch:#FF385C; --rausch-deep:#D70466; --babu:#008489;
+    --ink:#222; --ink-muted:#717171; --ink-faint:#9c9c9c;
+    --hairline:#ddd; --surface:#f7f7f7; --canvas:#fff; --card:#fff;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --ink:#f7f7f7; --ink-muted:#b0b0b0; --ink-faint:#8a8a8a;
+      --hairline:#3a3a3c; --surface:#1c1c1e; --canvas:#0e0e10; --card:#1c1c1e;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--canvas); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:16px; line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:720px;margin:0 auto;padding:0 24px 64px}
+  /* Hero ------------------------------------------------------------- */
+  .hero{
+    position:relative; margin:0 -24px 28px; padding:64px 24px 28px;
+    color:#fff; overflow:hidden;
+  }
+  .hero::after{
+    content:""; position:absolute; inset:0;
+    background:linear-gradient(to bottom,rgba(0,0,0,.12),rgba(0,0,0,.42));
+  }
+  .hero>*{position:relative;z-index:1}
+  .hero h1{
+    margin:0; font-size:34px; font-weight:800; letter-spacing:-.8px; line-height:1.1;
+    text-shadow:0 2px 12px rgba(0,0,0,.35);
+  }
+  .hero p{margin:6px 0 0;font-size:15px;font-weight:500;opacity:.95;text-shadow:0 1px 8px rgba(0,0,0,.35)}
+  .badge{
+    display:inline-block; margin-bottom:14px; padding:5px 11px; border-radius:999px;
+    background:rgba(255,255,255,.92); color:#222; font-size:12px; font-weight:600;
+    letter-spacing:.2px;
+  }
+  /* Days -------------------------------------------------------------- */
+  .day{margin-bottom:38px}
+  .day-label{
+    font-size:12px; font-weight:700; letter-spacing:.8px; text-transform:uppercase;
+    color:var(--rausch); margin-bottom:2px;
+  }
+  .day h2{margin:0 0 18px;font-size:21px;font-weight:600;letter-spacing:-.4px}
+  /* Timeline ---------------------------------------------------------- */
+  .stop{display:grid;grid-template-columns:64px 1fr;gap:14px;position:relative}
+  .rail{display:flex;flex-direction:column;align-items:center;padding-top:2px}
+  .time{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--rausch);margin-top:6px;flex:none}
+  .line{width:1.5px;flex:1;background:var(--hairline);margin-top:0}
+  .card{
+    background:var(--card); border:1px solid var(--hairline); border-radius:12px;
+    padding:14px; margin-bottom:16px;
+  }
+  .card h3{margin:0;font-size:15px;font-weight:600;letter-spacing:-.1px}
+  .card .blurb{margin:3px 0 0;font-size:14px;color:var(--ink-muted)}
+  .card .meta{margin:8px 0 0;font-size:13px;color:var(--ink-muted)}
+  .card .note{
+    margin:10px 0 0; font-size:13px; font-style:italic; color:var(--ink-muted);
+    border-left:2px solid var(--hairline); padding-left:10px;
+  }
+  .maps{
+    display:inline-block; margin-top:10px; font-size:13px; font-weight:600;
+    color:var(--ink); text-decoration:underline; text-underline-offset:2px;
+  }
+  .empty-day{font-size:14px;color:var(--ink-faint);padding-bottom:6px}
+  /* States ------------------------------------------------------------ */
+  .state{text-align:center;padding:88px 24px}
+  .state h1{font-size:22px;font-weight:600;letter-spacing:-.3px;margin:0 0 8px}
+  .state p{color:var(--ink-muted);margin:0 auto;max-width:34em;font-size:15px}
+  /* Invitation -------------------------------------------------------- */
+  .invite{
+    background:var(--surface); border-radius:16px; padding:22px; margin:8px 0 28px;
+  }
+  .invite h2{margin:0;font-size:19px;font-weight:650;letter-spacing:-.3px}
+  .invite p{margin:6px 0 16px;font-size:15px;color:var(--ink-muted);max-width:34em}
+  .invite a{
+    display:inline-block; padding:12px 20px; border-radius:10px; color:#fff; font-weight:600;
+    font-size:15px; text-decoration:none;
+    background:linear-gradient(90deg,var(--rausch),var(--rausch-deep));
+  }
+  .invite a:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+  /* Footer ------------------------------------------------------------ */
+  footer{
+    border-top:1px solid var(--hairline); margin-top:8px; padding-top:20px;
+    font-size:13px; color:var(--ink-faint); display:flex; gap:6px; align-items:center;
+  }
+  .mark{width:8px;height:8px;border-radius:50%;background:var(--rausch);flex:none}
+  @media (min-width:640px){
+    .hero{border-radius:0 0 16px 16px;padding-top:76px}
+    .hero h1{font-size:42px}
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="/trip.js"></script>
+</body>
+</html>

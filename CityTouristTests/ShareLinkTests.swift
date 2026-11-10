@@ -93,8 +93,16 @@ struct ShareLinkTests {
         #expect(throws: (any Error).self) { try ShareLinkBuilder.decode("!!!not-base64!!!") }
     }
 
+    /// With nothing configured, links open the viewer on the launch site, so
+    /// sharing works in every build.
+    @Test func shareLinksOpenTheLaunchSitesViewerByDefault() {
+        #expect(Secrets.defaultShareBaseURL == "https://citytourist.pages.dev/trip")
+        #expect(Secrets.hasShareBaseURL)
+        #expect(Secrets.shareBaseURL.hasPrefix("https://"))
+    }
+
     /// The web viewer reads these exact keys. Renaming a property here without
-    /// updating web/index.html produces a page that silently renders nothing,
+    /// updating launch/public/trip.js produces a page that silently renders nothing,
     /// so the contract is pinned in a test rather than in a comment.
     @Test func wireFormatMatchesWhatTheWebViewerReads() throws {
         let data = try JSONEncoder().encode(snapshot())

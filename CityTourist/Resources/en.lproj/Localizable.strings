@@ -493,3 +493,14 @@
 "Just the first day" = "Just the first day";
 "Have the whole trip planned around what you like, or start with an empty itinerary." = "Have the whole trip planned around what you like, or start with an empty itinerary.";
 "Places and opening hours from Google. Short videos from YouTube. Events from Ticketmaster and Eventbrite. Weather from Open-Meteo. Travel times and directions from Apple Maps. AI suggestions and trip plans from Claude, by Anthropic." = "Places and opening hours from Google. Short videos from YouTube. Events from Ticketmaster and Eventbrite. Weather from Open-Meteo. Travel times and directions from Apple Maps. AI suggestions and trip plans from Claude, by Anthropic.";
+"Name the city and your dates. We’ll plan each day around what you like, then check it against opening hours and travel times." = "Name the city and your dates. We’ll plan each day around what you like, then check it against opening hours and travel times.";
+"A plan for every day, in your own words" = "A plan for every day, in your own words";
+"Checked, so nothing is closed when you arrive" = "Checked, so nothing is closed when you arrive";
+"Leave-by times and directions on the day" = "Leave-by times and directions on the day";
+"Plan my trip" = "Plan my trip";
+"Look around first" = "Look around first";
+"No account needed. Your trips stay on your iPhone." = "No account needed. Your trips stay on your iPhone.";
+"%@ starts tomorrow" = "%@ starts tomorrow";
+"First up: %@ at %@." = "First up: %@ at %@.";
+"Nothing is planned for the first day yet. Open the trip to add a stop." = "Nothing is planned for the first day yet. Open the trip to add a stop.";
+"Opening hours are each place’s regular hours, and travel times are estimates. Check before you set off." = "Opening hours are each place’s regular hours, and travel times are estimates. Check before you set off.";

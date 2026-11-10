@@ -220,6 +220,47 @@ struct AppStoreTests {
         return (store, trip, first)
     }
 
+    private func tripReminder(for trip: Trip, in reminders: RecordingReminders) -> UNNotificationRequest? {
+        // The last word on the trip: a cancel after the last schedule means none stands.
+        let id = AppStore.tripReminderID(trip.id)
+        guard let request = reminders.scheduled.last(where: { $0.identifier == id }) else { return nil }
+        return reminders.log.last { $0.identifier == id }?.isCancel == true ? nil : request
+    }
+
+    /// Six the evening before, saying what comes first; it follows the plan
+    /// and goes when the trip does.
+    @Test func aTripRemindsYouTheEveningBeforeItStarts() throws {
+        let reminders = RecordingReminders()
+        let (store, _) = makeStore(reminders: reminders)
+        let places = SampleData.places(in: "lisbon")
+        PlaceDirectory.register(places)
+        let trip = store.createTrip(city: SampleData.cities[0], start: day(3), end: day(4), title: "Lisbon")
+
+        let empty = try #require(tripReminder(for: trip, in: reminders))
+        #expect(empty.content.title == "Lisbon starts tomorrow")
+        #expect(empty.content.body.contains("Nothing is planned"))
+        let fires = try #require((empty.trigger as? UNCalendarNotificationTrigger)?.dateComponents)
+        let eve = Calendar.current.dateComponents([.year, .month, .day], from: day(2))
+        #expect(fires.hour == 18 && fires.minute == 0)
+        #expect(fires.year == eve.year && fires.month == eve.month && fires.day == eve.day)
+
+        store.addStop(place: places[1], to: trip.id, dayIndex: 0, startMinute: 13 * 60)
+        store.addStop(place: places[0], to: trip.id, dayIndex: 0, startMinute: 9 * 60)
+        let planned = try #require(tripReminder(for: trip, in: reminders))
+        #expect(planned.content.body.contains(places[0].name), "the earliest stop of the first day")
+
+        store.deleteTrip(trip)
+        #expect(tripReminder(for: trip, in: reminders) == nil)
+    }
+
+    @Test func aTripAlreadyUnderWayOrStartingTodayGetsNoEveReminder() {
+        let reminders = RecordingReminders()
+        let (store, _) = makeStore(reminders: reminders)
+        let trip = store.createTrip(city: SampleData.cities[0], start: day(0), end: day(2))
+
+        #expect(tripReminder(for: trip, in: reminders) == nil)
+    }
+
     private func trigger(of stop: ItineraryStop, in reminders: RecordingReminders) -> DateComponents? {
         let request = reminders.scheduled.last { $0.identifier == "stop-\(stop.id.uuidString)" }
         return (request?.trigger as? UNCalendarNotificationTrigger)?.dateComponents
@@ -603,7 +644,16 @@ struct AppStoreTests {
 final class RecordingReminders: ReminderScheduling {
     private(set) var scheduled: [UNNotificationRequest] = []
     private(set) var cancelled: [String] = []
+    /// Both, in the order they happened.
+    private(set) var log: [(identifier: String, isCancel: Bool)] = []
 
-    func schedule(_ request: UNNotificationRequest) { scheduled.append(request) }
-    func cancel(identifiers: [String]) { cancelled += identifiers }
+    func schedule(_ request: UNNotificationRequest) {
+        scheduled.append(request)
+        log.append((request.identifier, false))
+    }
+
+    func cancel(identifiers: [String]) {
+        cancelled += identifiers
+        log += identifiers.map { ($0, true) }
+    }
 }

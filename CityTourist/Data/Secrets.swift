@@ -93,8 +93,9 @@ enum Secrets {
         return nil
     }
 
-    /// Where the web viewer is hosted. Set `ShareBaseURL` in Secrets.plist to
-    /// your own deployment; share links are built against it.
+    /// Where the web viewer is hosted: the launch site's own `/trip` page,
+    /// unless `ShareBaseURL` in Secrets.plist points at another deployment.
+    /// Share links are built against it.
     static let shareBaseURL: String = {
         if let url = Bundle.main.url(forResource: "Secrets", withExtension: "plist"),
            let data = try? Data(contentsOf: url),
@@ -103,8 +104,10 @@ enum Secrets {
            isUsable(base) {
             return base.hasSuffix("/") ? String(base.dropLast()) : base
         }
-        return "https://example.invalid/citytourist"
+        return defaultShareBaseURL
     }()
+
+    static let defaultShareBaseURL = "https://citytourist.pages.dev/trip"
 
     static var hasShareBaseURL: Bool { !shareBaseURL.contains("example.invalid") }
 
