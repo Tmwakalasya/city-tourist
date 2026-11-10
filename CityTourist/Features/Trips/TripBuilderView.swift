@@ -12,6 +12,7 @@ struct TripBuilderView: View {
     let onAccept: ([[ItineraryStop]]) -> Void
 
     @Environment(PlaceCatalog.self) private var catalog
+    @Environment(AppStore.self) private var store
     @State private var model: TripBuilding
     @State private var request = ""
     @State private var wishes: Set<String> = []
@@ -101,6 +102,9 @@ struct TripBuilderView: View {
             guard buildID != nil else { return }
             await build()
         }
+        .onAppear {
+            presetWishesFromInterests()
+        }
     }
 
     // MARK: Asking
@@ -169,6 +173,15 @@ struct TripBuilderView: View {
             wishes.insert(wish.title)
             if let opposite = wish.opposite { wishes.remove(opposite) }
         }
+    }
+
+    private func presetWishesFromInterests() {
+        guard wishes.isEmpty else { return }
+        let interests = Set(store.profile.interests ?? [])
+        if interests.contains(.food) { wishes.insert("Food first") }
+        if interests.contains(.museum) { wishes.insert("Museums & culture") }
+        if interests.contains(.nature) { wishes.insert("Outdoors & views") }
+        if interests.contains(.nightlife) { wishes.insert("Nights out") }
     }
 
     // MARK: Building
