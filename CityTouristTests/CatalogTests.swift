@@ -85,4 +85,18 @@ struct CatalogTests {
         place.typicalMinutes = 60;  #expect(place.durationLabel == "1 hr")
         place.typicalMinutes = 105; #expect(place.durationLabel == "1 hr 45 min")
     }
+    /// Typing a city's name in place search offers to go there, but not to
+    /// the city already being searched, and never a long list.
+    @Test func placeSearchOffersOtherCitiesThatMatchWhatWasTyped() {
+        let lisbon = SampleData.cities[0]
+        let found = [
+            CitySuggestion(id: lisbon.id, name: "Lisbon", region: "Portugal"),
+            CitySuggestion(id: "a", name: "Lisburn", region: "United Kingdom"),
+            CitySuggestion(id: "b", name: "Lisle", region: "Illinois, USA"),
+            CitySuggestion(id: "c", name: "Lisieux", region: "France")
+        ]
+
+        #expect(PlaceSearchView.cityMatches(found, besides: lisbon).map(\.id) == ["a", "b"])
+        #expect(PlaceSearchView.cityMatches([found[0]], besides: lisbon).isEmpty)
+    }
 }

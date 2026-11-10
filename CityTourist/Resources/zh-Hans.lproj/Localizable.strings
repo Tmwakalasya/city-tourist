@@ -505,3 +505,5 @@
 "First up: %@ at %@." = "第一站：%@，%@。";
 "Nothing is planned for the first day yet. Open the trip to add a stop." = "第一天还没有安排。打开行程添加一站。";
 "Opening hours are each place’s regular hours, and travel times are estimates. Check before you set off." = "营业时间为各地点的常规营业时间，出行时间为估算。出发前请确认。";
+"Search in another city" = "在其他城市搜索";
+"Explore %@" = "探索%@";

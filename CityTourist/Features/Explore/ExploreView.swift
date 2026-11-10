@@ -81,7 +81,9 @@ struct ExploreView: View {
             .overlay(alignment: .bottom) { mapButton }
             .navigationDestination(for: Place.self) { PlaceDetailView(place: $0) }
             .sheet(isPresented: $isSearchPresented) { SearchSheet() }
-            .sheet(isPresented: $isPlaceSearchPresented) { PlaceSearchView(city: city) }
+            .sheet(isPresented: $isPlaceSearchPresented) {
+                PlaceSearchView(city: city, onChangeCity: { store.browse($0) })
+            }
             .sheet(item: $placeToAdd) { AddToItinerarySheet(place: $0) }
             .sheet(item: $selectedEvent) { event in
                 NavigationStack {

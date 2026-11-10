@@ -9,6 +9,10 @@ struct PlaceSearchView: View {
     var initialCategory: PlaceCategory? = nil
     var excludedPlaceIDs: Set<String> = []
     var onAdd: ((Place) -> Void)? = nil
+    /// Set where the city is the searcher's to change, as in Explore: the
+    /// heading then switches city without leaving the search, and typing a
+    /// city's name offers to go there. A trip's day stays in the trip's city.
+    var onChangeCity: ((City) -> Void)? = nil
 
     @Environment(AppStore.self) private var store
     @Environment(PlaceCatalog.self) private var catalog
@@ -21,6 +25,20 @@ struct PlaceSearchView: View {
     @State private var requestPageToken: String?
     @State private var nextPageToken: String?
     @State private var requestID = UUID()
+    @State private var isChoosingCity = false
+    @State private var citySearch = CitySearchModel()
+    @State private var resolvingCityID: String?
+
+    /// Cities worth offering for what's been typed: not the one already
+    /// being searched, and few enough to sit above the results.
+    nonisolated static func cityMatches(_ suggestions: [CitySuggestion], besides city: City, limit: Int = 2) -> [CitySuggestion] {
+        Array(suggestions.filter { $0.id != city.id }.prefix(limit))
+    }
+
+    private var cityMatches: [CitySuggestion] {
+        guard onChangeCity != nil, trimmedQuery.count >= 3 else { return [] }
+        return Self.cityMatches(citySearch.suggestions, besides: city)
+    }
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var hasQuery: Bool { !trimmedQuery.isEmpty }
@@ -52,7 +70,22 @@ struct PlaceSearchView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 5) {
-                        Text("Around \(city.name)").sectionTitleStyle()
+                        if onChangeCity != nil {
+                            Button { isChoosingCity = true } label: {
+                                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                    Text("Around \(city.name)").sectionTitleStyle()
+                                    Image(systemName: "chevron.down")
+                                        .font(.footnote.weight(.bold))
+                                        .foregroundStyle(Brand.rausch)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint(L10n.text("Search in another city"))
+                            .accessibilityIdentifier("placeSearchCity")
+                        } else {
+                            Text("Around \(city.name)").sectionTitleStyle()
+                        }
                         Text(catalog.isLiveDataAvailable
                              ? L10n.format("Find a name, food or activity within %@ of the city centre.", store.distance(50_000))
                              : "Searching sample places. Live search is unavailable.").captionStyle()
@@ -73,9 +106,36 @@ struct PlaceSearchView: View {
             .onSubmit(of: .search) { submit() }
             .onChange(of: query) { _, _ in resetSearch() }
             .onChange(of: city.id) { _, _ in
-                query = ""
+                // What was typed carries over to the new city, and a search
+                // already made is made again there.
+                let wasSearched = !submittedQuery.isEmpty
                 category = nil
                 resetSearch()
+                if wasSearched { submit() }
+            }
+            .task(id: query) {
+                guard onChangeCity != nil else { return }
+                citySearch.query = trimmedQuery.count >= 3 ? trimmedQuery : ""
+                await citySearch.search()
+            }
+            .sheet(isPresented: $isChoosingCity) {
+                NavigationStack {
+                    ScrollView {
+                        CitySearchView(recents: store.recentCities, selection: city) { picked in
+                            isChoosingCity = false
+                            onChangeCity?(picked)
+                        }
+                        .padding(Metric.gutter)
+                    }
+                    .background(Palette.canvas)
+                    .navigationTitle("Search in another city")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Cancel") { isChoosingCity = false }.foregroundStyle(Palette.ink)
+                        }
+                    }
+                }
             }
             .navigationTitle(L10n.text(title))
             .navigationBarTitleDisplayMode(.inline)
@@ -108,9 +168,57 @@ struct PlaceSearchView: View {
         placeRows
     }
 
+    /// "Austin" typed while searching Miami most likely means go to Austin.
+    private var cityRows: some View {
+        ForEach(cityMatches) { match in
+            Button {
+                Task { await go(to: match) }
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "building.2")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Palette.ink)
+                        .frame(width: 36, height: 36)
+                        .background(Palette.elevated, in: Circle())
+                        .overlay { Circle().strokeBorder(Palette.hairline, lineWidth: 1) }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Explore \(match.name)").cardTitleStyle().lineLimit(1)
+                        if !match.region.isEmpty { Text(match.region).captionStyle().lineLimit(1) }
+                    }
+                    Spacer(minLength: 8)
+                    if resolvingCityID == match.id {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Palette.inkMuted)
+                    }
+                }
+                .padding(12)
+                .background(Palette.surface, in: RoundedRectangle(cornerRadius: Metric.cardRadius, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Metric.cardRadius, style: .continuous)
+                        .strokeBorder(Palette.hairline, lineWidth: 1)
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(resolvingCityID != nil)
+        }
+    }
+
+    /// The name typed was the city's, so it isn't carried over as a search.
+    private func go(to match: CitySuggestion) async {
+        resolvingCityID = match.id
+        defer { resolvingCityID = nil }
+        guard let picked = await citySearch.resolve(match) else { return }
+        query = ""
+        onChangeCity?(picked)
+    }
+
     @ViewBuilder
     private var searchContent: some View {
         if state == .idle {
+            cityRows
             Button {
                 submit()
             } label: {
