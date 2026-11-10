@@ -385,21 +385,21 @@ YouTube API Services, linking YouTube's terms and Google's privacy policy.
 
 ## Sharing and the web viewer
 
-`web/index.html` is a single self-contained page — no build step, no backend,
-no dependencies. Deploy it anywhere static:
+The viewer is `launch/public/trip.html` with `trip.js`, served by the launch
+site at `https://citytourist.pages.dev/trip` — no build step and no backend.
+It deploys with the rest of the site:
 
 ```bash
-# GitHub Pages: commit web/ and enable Pages, or
-npx netlify-cli deploy --dir=web --prod
+cd launch && npx wrangler pages deploy --branch main
 ```
 
-Then set `ShareBaseURL` in `Secrets.plist` to the deployed URL. Share links are
-built against it.
+Share links are built against that address. To host the viewer somewhere else,
+set `ShareBaseURL` in `Secrets.plist` to where it lives. The page ends with an
+invitation to get the app, since everyone a trip is shared with sees it.
 
-Copy and Share stay disabled until a viewer URL is configured. Every planned
-place must resolve before a share link can be created; the sheet loads missing
-places and offers a retry instead of silently sharing a partial plan. Preview
-works without configuring a viewer URL once all places have loaded.
+Every planned place must resolve before a share link can be created; the sheet
+loads missing places and offers a retry instead of silently sharing a partial
+plan.
 
 **The itinerary travels inside the link.** It's base64url-encoded JSON in the
 URL *fragment*, which has two consequences worth knowing:

@@ -494,3 +494,14 @@
 "Have the whole trip planned around what you like, or start with an empty itinerary." = "Fatti pianificare tutto il viaggio in base ai tuoi gusti, oppure parti da un itinerario vuoto.";
 "Places and opening hours from Google. Short videos from YouTube. Events from Ticketmaster and Eventbrite. Weather from Open-Meteo. Travel times and directions from Apple Maps. AI suggestions and trip plans from Claude, by Anthropic." = "Luoghi e orari di apertura da Google. Video brevi da YouTube. Eventi da Ticketmaster ed Eventbrite. Meteo da Open-Meteo. Tempi di spostamento e indicazioni da Mappe di Apple. Suggerimenti e programmi con IA di Claude, di Anthropic.";
 "All" = "Tutti";
+"Name the city and your dates. We’ll plan each day around what you like, then check it against opening hours and travel times." = "Indica la città e le date. Pianifichiamo ogni giorno in base ai tuoi gusti e poi lo verifichiamo con orari di apertura e tempi di spostamento.";
+"A plan for every day, in your own words" = "Un programma per ogni giorno, con parole tue";
+"Checked, so nothing is closed when you arrive" = "Verificato, così niente è chiuso quando arrivi";
+"Leave-by times and directions on the day" = "Orari di partenza e indicazioni il giorno stesso";
+"Plan my trip" = "Pianifica il mio viaggio";
+"Look around first" = "Prima do un’occhiata";
+"No account needed. Your trips stay on your iPhone." = "Non serve un account. I tuoi viaggi restano sul tuo iPhone.";
+"%@ starts tomorrow" = "%@ inizia domani";
+"First up: %@ at %@." = "Per cominciare: %@ alle %@.";
+"Nothing is planned for the first day yet. Open the trip to add a stop." = "Per il primo giorno non c’è ancora nulla in programma. Apri il viaggio per aggiungere una tappa.";
+"Opening hours are each place’s regular hours, and travel times are estimates. Check before you set off." = "Gli orari di apertura sono quelli abituali di ogni luogo e i tempi di spostamento sono stime. Controlla prima di partire.";

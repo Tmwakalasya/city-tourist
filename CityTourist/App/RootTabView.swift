@@ -9,6 +9,8 @@ struct RootTabView: View {
     @State private var selection: TabID = .explore
     @State private var hasChosenInitialTab = false
     @State private var isShowingIntro = true
+    /// Set once the welcome has been answered either way.
+    @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
 
     private enum TabID: Hashable { case explore, saved, trips, profile }
 
@@ -50,6 +52,12 @@ struct RootTabView: View {
                     .transition(.opacity)
             }
         }
+        .fullScreenCover(isPresented: Binding(get: { shouldWelcome }, set: { if !$0 { hasSeenWelcome = true } })) {
+            WelcomeView(onPlanned: { _ in
+                hasSeenWelcome = true
+                selection = .trips
+            }, onSkip: { hasSeenWelcome = true })
+        }
         .onAppear {
             guard !hasChosenInitialTab else { return }
             hasChosenInitialTab = true
@@ -75,6 +83,13 @@ struct RootTabView: View {
         .onChange(of: voiceOver) { _, enabled in
             if enabled { isShowingIntro = false }
         }
+    }
+
+    /// Only someone with no trips, once the launch animation is out of the
+    /// way. A tester who already has trips never sees it.
+    private var shouldWelcome: Bool {
+        !hasSeenWelcome && !isShowingIntro && store.trips.isEmpty && store.storageIssue == nil
+            && !CityTouristApp.isRunningTests
     }
 
     private var tabs: some View {

@@ -309,6 +309,11 @@ struct TripDetailView: View {
                     }
                 }
 
+                // The limits of what the timeline knows, said once.
+                Text("Opening hours are each place’s regular hours, and travel times are estimates. Check before you set off.")
+                    .captionStyle()
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 14)
             }
 
             whatsOn(trip, stops: stops)

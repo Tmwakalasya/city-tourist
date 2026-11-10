@@ -494,3 +494,14 @@
 "Have the whole trip planned around what you like, or start with an empty itinerary." = "按你的喜好规划整个行程，或从空行程开始。";
 "Places and opening hours from Google. Short videos from YouTube. Events from Ticketmaster and Eventbrite. Weather from Open-Meteo. Travel times and directions from Apple Maps. AI suggestions and trip plans from Claude, by Anthropic." = "地点和营业时间来自 Google。短视频来自 YouTube。活动来自 Ticketmaster 和 Eventbrite。天气来自 Open-Meteo。出行时间和路线来自 Apple 地图。AI 推荐和行程计划来自 Anthropic 的 Claude。";
 "All" = "全部";
+"Name the city and your dates. We’ll plan each day around what you like, then check it against opening hours and travel times." = "告诉我们城市和日期。我们会按你的喜好规划每一天，再对照营业时间和出行时间进行检查。";
+"A plan for every day, in your own words" = "用你自己的话，得到每一天的计划";
+"Checked, so nothing is closed when you arrive" = "经过检查，到了不会吃闭门羹";
+"Leave-by times and directions on the day" = "当天提供出发时间和路线";
+"Plan my trip" = "规划我的行程";
+"Look around first" = "先随便看看";
+"No account needed. Your trips stay on your iPhone." = "无需账户。你的行程保存在你的 iPhone 上。";
+"%@ starts tomorrow" = "%@明天开始";
+"First up: %@ at %@." = "第一站：%@，%@。";
+"Nothing is planned for the first day yet. Open the trip to add a stop." = "第一天还没有安排。打开行程添加一站。";
+"Opening hours are each place’s regular hours, and travel times are estimates. Check before you set off." = "营业时间为各地点的常规营业时间，出行时间为估算。出发前请确认。";
