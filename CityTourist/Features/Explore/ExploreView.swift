@@ -16,9 +16,22 @@ struct ExploreView: View {
     private var city: City { store.browsingCity }
 
     private var results: [Place] {
-        catalog.places(in: store.browsingCityID)
+        let places = catalog.places(in: store.browsingCityID)
             .filter { category == nil || $0.category == category }
-            .sorted { $0.rating > $1.rating }
+        
+        let userInterests = Set(store.profile.interests ?? [])
+        if category == nil && !userInterests.isEmpty {
+            // Personalize the ranking: surface matching interest categories first, then by rating
+            return places.sorted { a, b in
+                let aMatch = userInterests.contains(a.category)
+                let bMatch = userInterests.contains(b.category)
+                if aMatch != bMatch {
+                    return aMatch && !bMatch
+                }
+                return a.rating > b.rating
+            }
+        }
+        return places.sorted { $0.rating > $1.rating }
     }
 
     private var cityEvents: [Place] {
@@ -56,8 +69,7 @@ struct ExploreView: View {
                                 ListingCard(
                                     place: place,
                                     isSaved: store.isSaved(place),
-                                    // Airbnb badges its top result; ours flags the highest rated.
-                                    badge: index == 0 && category == nil ? "Traveller favourite" : nil,
+                                    badge: badgeFor(place: place, index: index),
                                     onAddToTrip: { placeToAdd = place }
                                 ) {
                                     store.toggleSaved(place)
@@ -211,6 +223,14 @@ struct ExploreView: View {
         }
         .padding(.top, 8)
         .background(.bar)
+    }
+
+    private func badgeFor(place: Place, index: Int) -> String? {
+        if index == 0 && category == nil { return "Traveller favourite" }
+        if category == nil, let userInterests = store.profile.interests, userInterests.contains(place.category), index < 3 {
+            return "For you"
+        }
+        return nil
     }
 
     private var pillSubtitle: String {
