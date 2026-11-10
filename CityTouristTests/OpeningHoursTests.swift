@@ -50,9 +50,9 @@ struct OpeningHoursTests {
     }
 
     @Test func aClosedDayIsNamed() throws {
-        let note = try #require(note(museum, weekday: 1, at: 11 * 60))
-        #expect(note.text == "closed on Mondays")
-        #expect(note.symbol == "xmark.circle")
+        let closedNote = try #require(self.note(museum, weekday: 1, at: 11 * 60))
+        #expect(closedNote.text == "closed on Mondays")
+        #expect(closedNote.symbol == "xmark.circle")
     }
 
     @Test func arrivingBeforeOpeningSaysWhenItOpens() {
