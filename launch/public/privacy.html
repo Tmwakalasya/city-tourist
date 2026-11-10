@@ -55,7 +55,7 @@ li { margin: 6px 0; }
 <main>
   <article>
     <div class="summary">
-      <p><strong>In short:</strong> the app has no accounts, no ads and no analytics. Your trips stay on your iPhone. To plan them, the app asks a few services for places, events, weather and routes. This website keeps the email you sign up with and any survey answers you send, and nothing is sold to anyone.</p>
+      <p><strong>In short:</strong> the app has no ads and no analytics, and you don't need an account to use it. Your trips stay on your iPhone. To plan them, the app asks a few services for places, events, weather and routes. If you use the AI features, what you type is sent to Anthropic's Claude. If you choose to sign in, your phone number is kept so you can sign in again. This website keeps the email you sign up with and any survey answers you send, and nothing is sold to anyone.</p>
     </div>
 
     <h2>The app</h2>
@@ -71,11 +71,20 @@ li { margin: 6px 0; }
       <li><strong>Google Places</strong>: the city and area you're browsing, what you search for, and the places on your trips, so it can show places, opening hours and photos. Covered by <a href="https://policies.google.com/privacy">Google's privacy policy</a>.</li>
       <li><strong>YouTube</strong>: the name and city of a place you open, to find short videos of it. A video you tap plays in YouTube's own player, so YouTube sees what you watch. The app uses YouTube API Services, and by watching videos in it you agree to the <a href="https://www.youtube.com/t/terms">YouTube Terms of Service</a>. The list of videos found for a place is kept on your iPhone for up to a week. Covered by <a href="https://policies.google.com/privacy">Google's privacy policy</a>.</li>
       <li><strong>Ticketmaster</strong>: your trip's city and dates, to find events on during it. Covered by <a href="https://privacy.ticketmaster.com/privacy-policy">Ticketmaster's privacy policy</a>.</li>
+      <li><strong>Eventbrite</strong>: the city's location and the dates, to find more events. The request goes through our own server at Supabase, which passes it on and doesn't keep your internet address.</li>
       <li><strong>Open-Meteo</strong>: the city's location and your trip's dates, for the forecast and sunset times.</li>
       <li><strong>Apple Maps</strong>: the stops (and, on Today and in Directions, your location or the starting point you type) between which it times or draws a trip, and addresses you type, such as where you're staying. Covered by <a href="https://www.apple.com/legal/privacy/">Apple's privacy policy</a>.</li>
     </ul>
     <p>If you tap <em>More on TikTok</em> or <em>Instagram</em> on a place, their app or website opens with the place's name. What happens there is covered by their own privacy policies.</p>
-    <p>Like any app that goes online, these requests come from your device's internet address. The app doesn't send your name, your email or anything that identifies you.</p>
+    <p>Like any app that goes online, these requests come from your device's internet address. They don't include your name, your email or your phone number.</p>
+
+    <h3>AI suggestions and trip plans</h3>
+    <p>The AI concierge and "Plan my whole trip" are answered by Claude, a model made by Anthropic. When you use either, the app sends Anthropic what you typed or chose, the city, your trip's dates when a whole trip is being planned, and public facts about a list of places there, such as names, areas, ratings and opening days. It doesn't send your location, your saved places, your other trips, your name or your phone number. So don't type anything private into the request. Covered by <a href="https://www.anthropic.com/legal/privacy">Anthropic's privacy policy</a>.</p>
+    <p>The plan that comes back is checked on your iPhone against opening hours and travel times. Nothing from the AI features is used unless you tap to add it to a trip.</p>
+
+    <h3>Signing in</h3>
+    <p>Signing in is optional, and the app works the same without it. If you sign in, you give your phone number and are texted a code to confirm it. The number and your sign-in are kept by Supabase, our database provider, and the text is sent by the messaging service it uses. The app keeps you signed in with a token stored in your iPhone's keychain.</p>
+    <p>If you add a profile photo while signed in, it's stored with Supabase where only your account can read it. The name on your profile stays on your iPhone. Your trips aren't uploaded when you sign in.</p>
 
     <h3>Reminders</h3>
     <p>Leave-by reminders are scheduled on your iPhone. They aren't sent from a server.</p>
@@ -101,7 +110,8 @@ li { margin: 6px 0; }
     <ul>
       <li>To have your sign-up or survey answers deleted, or to ask what we hold about you, email <a href="mailto:tmwakalasya@icloud.com">tmwakalasya@icloud.com</a>.</li>
       <li>To stop beta emails, reply and say so, and we'll take you off the list.</li>
-      <li>To remove everything the app keeps, delete the app.</li>
+      <li>To sign out, use Sign out in the app's Settings. To have your sign-in, phone number and profile photo deleted, email the address above from any account and tell us the phone number.</li>
+      <li>To remove everything the app keeps on your iPhone, delete the app.</li>
     </ul>
 
     <h2>Children</h2>
@@ -113,7 +123,7 @@ li { margin: 6px 0; }
     <h2>Contact</h2>
     <p>Questions about privacy: <a href="mailto:tmwakalasya@icloud.com">tmwakalasya@icloud.com</a></p>
 
-    <p class="updated">Last updated October 29, 2026</p>
+    <p class="updated">Last updated November 9, 2026</p>
   </article>
 </main>
 </body>

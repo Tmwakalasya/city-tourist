@@ -114,7 +114,7 @@ struct TripBuilderView: View {
             .font(.caption.weight(.bold))
             .foregroundStyle(Brand.rausch)
 
-            Text("\(dates.count) \(dates.count == 1 ? "day" : "days") in \(city.name)")
+            Text(verbatim: L10n.format(dates.count == 1 ? "%d day in %@" : "%d days in %@", dates.count, city.name))
                 .displayStyle()
                 .fixedSize(horizontal: false, vertical: true)
             Text(dateRange).metaStyle()
@@ -175,9 +175,9 @@ struct TripBuilderView: View {
 
     private var progress: some View {
         VStack(alignment: .leading, spacing: 16) {
-            step("Finding places in \(city.name)", for: .finding)
-            step("Drafting your days", for: .drafting)
-            step("Checking opening hours and travel times", for: .checking)
+            step(L10n.format("Finding places in %@", city.name), for: .finding)
+            step(L10n.text("Drafting your days"), for: .drafting)
+            step(L10n.text("Checking opening hours and travel times"), for: .checking)
             Text("Keep this screen open while it builds.").captionStyle()
         }
         .padding(18)
@@ -201,7 +201,7 @@ struct TripBuilderView: View {
                 }
             }
             .frame(width: 22)
-            Text(title)
+            Text(verbatim: title)
                 .font(.subheadline.weight(index == current ? .semibold : .regular))
                 .foregroundStyle(index > current ? Palette.inkMuted : Palette.ink)
         }
@@ -212,7 +212,10 @@ struct TripBuilderView: View {
         let dates = dates
         let service = TripDraftService()
         let draft: (([Place]) async throws -> TripDraftService.Draft)? = service.map { service in
-            { places in try await service.draft(request: text, city: city, dates: dates, candidates: places) }
+            { places in
+                try await service.draft(request: text, city: city, dates: dates, candidates: places,
+                                        language: L10n.languageName)
+            }
         }
         await model.run(builder: builder, find: {
             await catalog.load(city: city)
@@ -394,7 +397,7 @@ struct TripBuilderView: View {
             VStack(spacing: 12) {
                 PrimaryButton(title: "Try again") { start() }
                 if !model.candidates.isEmpty {
-                    Button("Build a starter plan without AI") { model.useStarter(builder: builder) }
+                    Button(L10n.text("Build a starter plan without AI")) { model.useStarter(builder: builder) }
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Palette.ink)
                 }
@@ -409,7 +412,7 @@ struct TripBuilderView: View {
                     }
                 }
                 .accessibilityIdentifier("useTripButton")
-                Button("Change what I asked for") { model.reset() }
+                Button(L10n.text("Change what I asked for")) { model.reset() }
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Palette.ink)
             }

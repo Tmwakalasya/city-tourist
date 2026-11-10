@@ -32,6 +32,11 @@ enum L10n {
         AppLanguage(rawValue: UserDefaults.standard.string(forKey: "displayLanguage") ?? "device") ?? .device
     }
     static var locale: Locale { language.locale }
+    /// The app's language by its English name, "Spanish", for telling a model
+    /// which language to write in.
+    static var languageName: String {
+        Locale(identifier: "en").localizedString(forIdentifier: resourceCode(for: locale)) ?? "English"
+    }
     static func resourceCode(for locale: Locale) -> String {
         let code = locale.language.languageCode?.identifier ?? "en"
         if code == "zh" {
