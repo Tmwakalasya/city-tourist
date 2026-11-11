@@ -484,7 +484,7 @@
 "The plan came back in a form the app couldn’t read. Try again." = "プランをアプリが読み取れない形式で受け取りました。もう一度お試しください。";
 "You’ve reached today’s AI limit on this device. Try again tomorrow, or build a starter plan without it." = "この端末の今日のAI上限に達しました。明日もう一度試すか、AIなしでスタータープランを作成してください。";
 "That request couldn’t be planned. Try describing the trip another way." = "このリクエストは計画できませんでした。旅の内容を別の言い方で入力してください。";
-"The AI key in this build was rejected, so the trip couldn’t be drafted." = "このビルドのAIキーが拒否されたため、旅行を作成できませんでした。";
+"The trip builder has had all the requests it can take for now. Try again later." = "旅行プランナーは現在、対応できる上限までリクエストを受けています。しばらくしてからもう一度お試しください。";
 "The trip builder is busy right now. Try again in a minute." = "トリップビルダーが混み合っています。1分後にもう一度お試しください。";
 "The trip couldn’t be drafted. Try again." = "旅行を作成できませんでした。もう一度お試しください。";
 "No places could be loaded for this city. Check your connection and try again." = "この都市の場所を読み込めませんでした。接続を確認してもう一度お試しください。";

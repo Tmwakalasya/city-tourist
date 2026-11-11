@@ -5,9 +5,7 @@ struct LaunchIntroView: View {
     @State private var appeared = false
 
     var body: some View {
-        VStack(spacing: 28) {
-            Spacer()
-
+        VStack(spacing: 24) {
             ZStack {
                 route.stroke(Palette.hairline, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                 route.trim(from: 0, to: appeared ? 1 : 0)
@@ -31,9 +29,6 @@ struct LaunchIntroView: View {
                 .font(.title.weight(.bold))
                 .tracking(-0.6)
                 .foregroundStyle(Palette.ink)
-
-            Spacer()
-            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.canvas.ignoresSafeArea())
@@ -53,8 +48,3 @@ struct LaunchIntroView: View {
         }
     }
 }
-
-#Preview {
-    LaunchIntroView()
-}
-

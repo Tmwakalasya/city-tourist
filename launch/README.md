@@ -3,7 +3,8 @@
 The beta sign-up page for Cloudflare Pages:
 
 - `public/` is what's served: `index.html`, `app.js`, `_headers` and the icons.
-- `functions/api/signup.js` is the one Pages Function. It adds each sign-up to a Supabase table and can also email you about it.
+- `functions/api/signup.js` adds each sign-up to a Supabase table and can also email you about it.
+- `functions/api/ai/` answers the app's AI features, so the Claude key stays on the server. See below.
 - `supabase/beta_signups.sql` creates the table.
 - `tests/` has the functions' tests: `node --test 'launch/tests/*.test.mjs'`.
 
@@ -59,6 +60,43 @@ from beta_feedback order by created_at desc;
 Both functions share `lib/request.js`: the same-origin JSON reader, the
 Supabase insert and the per-IP limit.
 
+## The app's AI endpoints
+
+The app's AI concierge and "Plan my whole trip" don't hold a Claude key. They post to two Pages Functions here, which add the key, the prompt and the model:
+
+- `functions/api/ai/concierge.js` — `POST /api/ai/concierge`
+- `functions/api/ai/trip.js` — `POST /api/ai/trip`
+- `lib/claude.js` — what they share: the limits and the call to Claude.
+
+Set the key once, then deploy:
+
+```
+cd launch
+npx wrangler pages secret put ANTHROPIC_API_KEY --project-name citytourist
+npx wrangler pages deploy --branch main
+```
+
+Use a key made for this server, not one that has ever been in an app build. Rotating it later is the same command, with no new app build.
+
+Nothing proves a request came from the app, so the endpoints are built to be dull to anyone else: the caller can't choose the model, the prompt, the output shape or the size, and calls are counted in the `SIGNUPS` KV namespace before they cost anything.
+
+| Limit | Default | Change it with |
+| --- | --- | --- |
+| Trip drafts a day, per address | 40 | `PER_IP_PER_DAY` in `trip.js` |
+| Trip drafts a day, everyone | 200 | `TRIP_DAILY_LIMIT` under `[vars]` |
+| Concierge searches a day, per address | 120 | `PER_IP_PER_DAY` in `concierge.js` |
+| Concierge searches a day, everyone | 600 | `CONCIERGE_DAILY_LIMIT` under `[vars]` |
+
+One address gets a fifth of the day, so it takes several to use it up for everybody. Addresses in the same IPv6 /64 count as one. A limit of `0` switches that endpoint off; a blank one means the default. `TRIP_MODEL` and `CONCIERGE_MODEL` under `[vars]` change the models without an app build. Without the key or the KV binding the endpoints answer 503 and send nothing.
+
+**Set a monthly spend limit on the key's workspace in the Anthropic console.** The limits above are counters in KV, and KV isn't a lock: requests that arrive at the same instant all read the same count, so a deliberate burst of a few hundred parallel requests gets through before any of them is counted. The spend limit is what makes that a bounded loss. Closing it properly means counting in a Durable Object and answering only genuine copies of the app (App Attest); both are after-launch work.
+
+Each call writes two KV keys, and KV's free plan allows 1,000 writes a day across the whole namespace, which is about 500 AI calls. When the writes run out, the AI endpoints answer 503 until the next day (a call that can't be counted isn't made), while sign-ups and the survey carry on without their per-IP limit. Before more than a few hundred AI calls a day are likely, move the account to Workers Paid.
+
+When something is wrong, `npx wrangler pages deployment tail --project-name citytourist` shows the endpoints' log lines: `claude refused <status> <type> <model>` when Claude turns a call down (a revoked key is `401 authentication_error`), and `ai counter write failed` when KV does.
+
+To try them locally, put `ANTHROPIC_API_KEY=...` in `launch/.dev.vars` (gitignored) and run `npx wrangler pages dev`.
+
 ## Preview locally
 
 `cd launch && npx wrangler pages dev public` serves the page and runs the
@@ -79,5 +117,7 @@ server pointed at `public/` shows the page, but the form needs the function.
   can't read the list, so if it leaked, the emails wouldn't. The table's own
   checks repeat the email and name rules for anything that bypasses the
   function.
+- The Claude key is a Pages secret and never reaches a browser or the app. The app's bundle holds only keys that are safe to publish: Google's, restricted to the app's bundle ID and to two APIs, and Supabase's publishable key.
+- The AI endpoints' counters aren't atomic, so a parallel burst can pass the caps by its own size; the spend limit on the Claude key bounds that. See "The app's AI endpoints".
 - For a harder limit than the per-IP KV counter, add a Cloudflare rate-limiting
   rule on `/api/signup`.

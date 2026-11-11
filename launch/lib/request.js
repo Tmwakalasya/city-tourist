@@ -60,13 +60,38 @@ export function insertRow(env, table, row) {
 
 /**
  * Counts this request against its IP's hourly allowance under `prefix`.
- * False when the allowance is used up. Without a KV binding there's no limit.
+ * False when the allowance is used up. Without a KV binding there's no limit,
+ * and none either when KV can't be read or written (its daily writes can run
+ * out): a form that costs nothing to answer should keep answering.
  */
 export async function underIPLimit(env, request, prefix, perHour) {
   if (!env.SIGNUPS) return true;
   const key = `${prefix}:${request.headers.get("cf-connecting-ip") || "unknown"}`;
-  const tries = Number(await env.SIGNUPS.get(key)) || 0;
-  if (tries >= perHour) return false;
-  await env.SIGNUPS.put(key, String(tries + 1), { expirationTtl: 3600 });
+  try {
+    const tries = Number(await env.SIGNUPS.get(key)) || 0;
+    if (tries >= perHour) return false;
+    await env.SIGNUPS.put(key, String(tries + 1), { expirationTtl: 3600 });
+  } catch (error) {
+    console.error("ip counter failed", prefix, String(error));
+  }
   return true;
+}
+
+/** A KV read that answers null when KV can't. */
+export async function recall(env, key) {
+  try {
+    return env.SIGNUPS ? await env.SIGNUPS.get(key) : null;
+  } catch (error) {
+    console.error("kv read failed", String(error));
+    return null;
+  }
+}
+
+/** A KV write that is skipped, not thrown, when KV can't. */
+export async function remember(env, key, value) {
+  try {
+    if (env.SIGNUPS) await env.SIGNUPS.put(key, value);
+  } catch (error) {
+    console.error("kv write failed", String(error));
+  }
 }

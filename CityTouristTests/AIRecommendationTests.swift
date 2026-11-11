@@ -138,7 +138,7 @@ struct AIRecommendationTests {
     }
 
     @Test(.enabled(if: ProcessInfo.processInfo.environment["CITYTOURIST_LIVE_AI_TEST"] == "1"))
-    func livePlacesThroughLocalRelayReturnUsablePicks() async throws {
+    func livePlacesThroughTheServerReturnUsablePicks() async throws {
         let google = try #require(GooglePlacesService())
         let city = SampleData.cities[0]
         let candidates = try await google.searchPlaces(query: "Coffee and pastries", city: city).places
@@ -163,16 +163,21 @@ extension PlacesAPITests {
         let service = AIRecommendationService(session: StubURLProtocol.makeSession())
         let result = try await service.recommend(query: "a little culture", city: SampleData.cities[0], candidates: [place])
         let request = try #require(StubURLProtocol.recorded.first)
-        #expect(request.url?.host == "127.0.0.1")
+        #expect(request.url == AIRecommendationService.endpoint)
+        #expect(request.url?.scheme == "https" && request.url?.lastPathComponent == "concierge")
         #expect(request.httpMethod == "POST")
         #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
-        #expect(request.value(forHTTPHeaderField: "X-Prototype-Client") == "city-tourist-simulator")
+        #expect(request.value(forHTTPHeaderField: "x-api-key") == nil, "the key lives on the server")
+        #expect(request.stubBody?["model"] == nil && request.stubBody?["system"] == nil,
+                "the prompt and the model are the server's to choose")
         #expect(request.stubBody?["query"] as? String == "a little culture")
         #expect(result.picks.first?.place == place)
     }
 
     @Test func aiRelayFailureAndMalformedOutputAreErrors() async {
-        for (status, json) in [(429, #"{"message":"Prototype allowance reached."}"#),
+        for (status, json) in [(429, #"{"error":"That's all for today. Try again tomorrow."}"#),
+                               (502, #"{"error":"upstream said sk-ant-leaked"}"#),
+                               (503, #"{"error":"Busy right now."}"#),
                                (200, #"{"summary":"Try this","picks":[{"id":"invented","reason":"Great","caveat":""}]}"#),
                                (200, "not JSON")] {
             StubURLProtocol.reset()
@@ -181,7 +186,25 @@ extension PlacesAPITests {
                 _ = try await AIRecommendationService(session: StubURLProtocol.makeSession())
                     .recommend(query: "coffee", city: SampleData.cities[0], candidates: SampleData.places(in: "lisbon"))
                 Issue.record("The invalid response must not become successful recommendations")
-            } catch { #expect(error is AIRecommendationService.Failure) }
+            } catch {
+                #expect(error is AIRecommendationService.Failure)
+                #expect(!error.localizedDescription.contains("sk-ant"), "the server's words aren't shown")
+            }
+        }
+    }
+
+    @Test func aSearchTheServerTurnedAwayIsHandedBack() async {
+        for (status, handedBack) in [(429, true), (503, true), (502, false)] {
+            StubURLProtocol.reset()
+            StubURLProtocol.respond(status: status, json: #"{"error":"no"}"#)
+            let budget = RequestBudget(name: "test", limits: .init(perMinute: 1, perDay: 1), defaults: nil)
+            let service = AIRecommendationService(session: StubURLProtocol.makeSession(), budget: budget)
+            do {
+                _ = try await service.recommend(query: "coffee", city: SampleData.cities[0],
+                                                candidates: SampleData.places(in: "lisbon"))
+                Issue.record("status \(status) must fail")
+            } catch {}
+            #expect(budget.spend() == handedBack, "status \(status)")
         }
     }
 

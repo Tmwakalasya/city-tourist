@@ -12,7 +12,6 @@ struct TripBuilderView: View {
     let onAccept: ([[ItineraryStop]]) -> Void
 
     @Environment(PlaceCatalog.self) private var catalog
-    @Environment(AppStore.self) private var store
     @State private var model: TripBuilding
     @State private var request = ""
     @State private var wishes: Set<String> = []
@@ -102,9 +101,6 @@ struct TripBuilderView: View {
             guard buildID != nil else { return }
             await build()
         }
-        .onAppear {
-            presetWishesFromInterests()
-        }
     }
 
     // MARK: Asking
@@ -175,15 +171,6 @@ struct TripBuilderView: View {
         }
     }
 
-    private func presetWishesFromInterests() {
-        guard wishes.isEmpty else { return }
-        let interests = Set(store.profile.interests ?? [])
-        if interests.contains(.food) { wishes.insert("Food first") }
-        if interests.contains(.museum) { wishes.insert("Museums & culture") }
-        if interests.contains(.nature) { wishes.insert("Outdoors & views") }
-        if interests.contains(.nightlife) { wishes.insert("Nights out") }
-    }
-
     // MARK: Building
 
     private var progress: some View {
@@ -224,17 +211,15 @@ struct TripBuilderView: View {
         let text = fullRequest
         let dates = dates
         let service = TripDraftService()
-        let draft: (([Place]) async throws -> TripDraftService.Draft)? = service.map { service in
-            { places in
-                try await service.draft(request: text, city: city, dates: dates, candidates: places,
-                                        language: L10n.languageName)
-            }
+        let draft: (([Place]) async throws -> TripDraftService.Draft)? = { places in
+            try await service.draft(request: text, city: city, dates: dates, candidates: places,
+                                    language: L10n.languageName)
         }
         await model.run(builder: builder, find: {
             await catalog.load(city: city)
             var batches: [[Place]] = []
             // Extra searches only help a draft that reads the request.
-            if service != nil, catalog.isLiveDataAvailable {
+            if catalog.isLiveDataAvailable {
                 for term in TripDraftService.searchTerms(for: text) {
                     if let page = try? await catalog.searchPlaces(query: term, city: city) {
                         batches.append(page.places)

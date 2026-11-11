@@ -9,8 +9,6 @@ struct RootTabView: View {
     @State private var selection: TabID = .explore
     @State private var hasChosenInitialTab = false
     @State private var isShowingIntro = true
-    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
-    @State private var onboardingStarted = false
     /// Set once the welcome has been answered either way.
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
 
@@ -27,30 +25,19 @@ struct RootTabView: View {
                     Button("Try again") { store.retryStorage() }
                         .buttonStyle(.borderedProminent)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if needsOnboarding {
-                OnboardingView {
-                    withAnimation(reduceMotion ? nil : Animation.easeInOut(duration: 0.35)) { hasCompletedOnboarding = true }
-                }
-                .onAppear { onboardingStarted = true }
-                .transition(.opacity)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 tabs
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .transition(.opacity)
                     .safeAreaInset(edge: .top, spacing: 0) {
                         if store.storageIssue == .unsaved {
-                            VStack(alignment: .center, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 8) {
                                 Label("Changes haven’t been saved", systemImage: "exclamationmark.triangle")
                                     .font(.subheadline.weight(.semibold))
                                 Text("Keep the app open and try saving again.")
                                     .font(.subheadline)
-                                    .multilineTextAlignment(.center)
                                 Button("Save again") { store.retryStorage() }
                                     .font(.subheadline.weight(.semibold))
                             }
-                            .frame(maxWidth: .infinity, alignment: .center)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding()
                             .background(Palette.surface)
                         }
@@ -98,18 +85,10 @@ struct RootTabView: View {
         }
     }
 
-    /// New travellers get the walk-through once. Anyone who already has trips,
-    /// saved places or an account from an earlier build goes straight in.
-    private var needsOnboarding: Bool {
-        guard !hasCompletedOnboarding else { return false }
-        return onboardingStarted
-            || (store.trips.isEmpty && store.savedPlaceIDs.isEmpty && authentication.session == nil)
-    }
-
     /// Only someone with no trips, once the launch animation is out of the
-    /// way and onboarding is done.
+    /// way. A tester who already has trips never sees it.
     private var shouldWelcome: Bool {
-        !hasSeenWelcome && hasCompletedOnboarding && !isShowingIntro && store.trips.isEmpty && store.storageIssue == nil
+        !hasSeenWelcome && !isShowingIntro && store.trips.isEmpty && store.storageIssue == nil
             && !CityTouristApp.isRunningTests
     }
 
