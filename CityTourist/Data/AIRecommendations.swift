@@ -50,9 +50,10 @@ struct AIPlaceCandidate: Encodable {
             parts.append("Evening nightlife, drinks, and social spot in \(place.neighborhood).")
         }
         if place.reviewCount >= 1_000 {
-            parts.append("Flagship city icon and premier hotspot (\(place.reviewCount) reviews).")
+            // The count goes in its own field; here it would be quoted back.
+            parts.append("Flagship city icon and premier hotspot.")
         } else if place.reviewCount >= 300 {
-            parts.append("Well-known, popular local standout (\(place.reviewCount) reviews).")
+            parts.append("Well-known, popular local standout.")
         }
         if let hours = place.todayHours, !hours.isEmpty {
             parts.append("Today's hours: \(hours).")

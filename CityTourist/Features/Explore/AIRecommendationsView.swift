@@ -297,27 +297,31 @@ struct AIRecommendationsView: View {
             }
             .buttonStyle(.plain)
             VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline) {
                         NavigationLink(value: pick.place) {
                             Text(pick.place.name).font(.headline).foregroundStyle(Palette.ink)
                         }
                         .buttonStyle(.plain)
-                        HStack(spacing: 5) {
-                            Text(pick.place.neighborhood).captionStyle().lineLimit(1)
-                            Text("·").foregroundStyle(Palette.inkFaint)
-                            Text(L10n.format("%@ from centre", distance(for: pick.place))).captionStyle()
-                            if let open = pick.place.openLabel {
-                                Text("·").foregroundStyle(Palette.inkFaint)
-                                Text(open)
-                                    .font(.caption.weight(.medium))
-                                    .foregroundStyle(pick.place.isOpenNow == false ? Brand.rausch : Brand.babu)
-                            }
+                        Spacer(minLength: 8)
+                        if pick.place.rating > 0 {
+                            RatingLabel(rating: pick.place.rating, reviewCount: pick.place.reviewCount, size: 12)
                         }
                     }
-                    Spacer(minLength: 8)
-                    if pick.place.rating > 0 {
-                        RatingLabel(rating: pick.place.rating, reviewCount: pick.place.reviewCount, size: 12)
+                    // The whole width, under the name. The address gives way;
+                    // the distance and the hours stay on one line each.
+                    HStack(spacing: 5) {
+                        Text(pick.place.neighborhood).captionStyle().lineLimit(1)
+                        Text("·").foregroundStyle(Palette.inkFaint)
+                        Text(L10n.format("%@ from centre", distance(for: pick.place))).captionStyle()
+                            .lineLimit(1).fixedSize()
+                        if let open = pick.place.openLabel {
+                            Text("·").foregroundStyle(Palette.inkFaint)
+                            Text(open)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(pick.place.isOpenNow == false ? Brand.rausch : Brand.babu)
+                                .lineLimit(1).fixedSize()
+                        }
                     }
                 }
                 HStack(alignment: .top, spacing: 8) {
