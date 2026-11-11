@@ -19,7 +19,7 @@
 // Bindings → KV namespace bound as SIGNUPS (recommended): limits each IP
 // address to a few sign-ups an hour and stops repeats emailing you twice.
 
-import { EMAIL, json, readJSON, insertRow, underIPLimit } from "../../lib/request.js";
+import { EMAIL, json, readJSON, insertRow, underIPLimit, recall, remember } from "../../lib/request.js";
 
 const MAX_BODY_BYTES = 2048;
 const MAX_NAME = 80;
@@ -50,7 +50,7 @@ export async function onRequestPost({ request, env }) {
   if (!(await underIPLimit(env, request, "ip", PER_IP_PER_HOUR))) {
     return json({ error: "Too many signups from here. Try again in an hour." }, 429);
   }
-  let isRepeat = env.SIGNUPS ? Boolean(await env.SIGNUPS.get(`email:${email}`)) : false;
+  let isRepeat = Boolean(await recall(env, `email:${email}`));
 
   if (canStore) {
     const stored = await insertRow(env, "beta_signups", { email, name: name || null });
@@ -75,9 +75,7 @@ export async function onRequestPost({ request, env }) {
     if (!sent.ok && !canStore) return json({ error: "That didn't go through. Try again in a minute." }, 502);
   }
 
-  if (env.SIGNUPS && !isRepeat) {
-    await env.SIGNUPS.put(`email:${email}`, "1");
-  }
+  if (!isRepeat) await remember(env, `email:${email}`, "1");
   return json({ ok: true });
 }
 

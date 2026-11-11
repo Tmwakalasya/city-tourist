@@ -82,16 +82,18 @@ Nothing proves a request came from the app, so the endpoints are built to be dul
 
 | Limit | Default | Change it with |
 | --- | --- | --- |
-| Trip drafts per IP per hour | 12 | `PER_IP_PER_HOUR` in `trip.js` |
+| Trip drafts a day, per address | 40 | `PER_IP_PER_DAY` in `trip.js` |
 | Trip drafts a day, everyone | 200 | `TRIP_DAILY_LIMIT` under `[vars]` |
-| Concierge searches per IP per hour | 30 | `PER_IP_PER_HOUR` in `concierge.js` |
+| Concierge searches a day, per address | 120 | `PER_IP_PER_DAY` in `concierge.js` |
 | Concierge searches a day, everyone | 600 | `CONCIERGE_DAILY_LIMIT` under `[vars]` |
 
-A limit of `0` switches that endpoint off. `TRIP_MODEL` and `CONCIERGE_MODEL` under `[vars]` change the models without an app build. Without the key or the KV binding the endpoints answer 503 and send nothing.
+One address gets a fifth of the day, so it takes several to use it up for everybody. Addresses in the same IPv6 /64 count as one. A limit of `0` switches that endpoint off; a blank one means the default. `TRIP_MODEL` and `CONCIERGE_MODEL` under `[vars]` change the models without an app build. Without the key or the KV binding the endpoints answer 503 and send nothing.
 
-Also set a monthly spend limit on the key's workspace in the Anthropic console: it's the backstop if these limits are ever wrong.
+**Set a monthly spend limit on the key's workspace in the Anthropic console.** The limits above are counters in KV, and KV isn't a lock: requests that arrive at the same instant all read the same count, so a deliberate burst of a few hundred parallel requests gets through before any of them is counted. The spend limit is what makes that a bounded loss. Closing it properly means counting in a Durable Object and answering only genuine copies of the app (App Attest); both are after-launch work.
 
-Each call writes two KV keys, and KV's free plan allows 1,000 writes a day, which is about 500 AI calls. Past that, move to the paid plan or a Cloudflare rate-limiting rule.
+Each call writes two KV keys, and KV's free plan allows 1,000 writes a day across the whole namespace, which is about 500 AI calls. When the writes run out, the AI endpoints answer 503 until the next day (a call that can't be counted isn't made), while sign-ups and the survey carry on without their per-IP limit. Before more than a few hundred AI calls a day are likely, move the account to Workers Paid.
+
+When something is wrong, `npx wrangler pages deployment tail --project-name citytourist` shows the endpoints' log lines: `claude refused <status> <type> <model>` when Claude turns a call down (a revoked key is `401 authentication_error`), and `ai counter write failed` when KV does.
 
 To try them locally, put `ANTHROPIC_API_KEY=...` in `launch/.dev.vars` (gitignored) and run `npx wrangler pages dev`.
 
@@ -116,6 +118,6 @@ server pointed at `public/` shows the page, but the form needs the function.
   checks repeat the email and name rules for anything that bypasses the
   function.
 - The Claude key is a Pages secret and never reaches a browser or the app. The app's bundle holds only keys that are safe to publish: Google's, restricted to the app's bundle ID and to two APIs, and Supabase's publishable key.
-- The AI endpoints' counters aren't atomic: two requests at the same instant can both get through on the last allowance. The daily cap can be passed by a handful, not by much. The next step up is App Attest, so the server only answers a genuine copy of the app.
+- The AI endpoints' counters aren't atomic, so a parallel burst can pass the caps by its own size; the spend limit on the Claude key bounds that. See "The app's AI endpoints".
 - For a harder limit than the per-IP KV counter, add a Cloudflare rate-limiting
   rule on `/api/signup`.

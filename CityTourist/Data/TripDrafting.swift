@@ -152,11 +152,22 @@ struct TripDraftService {
             throw error
         }
         guard let http = response as? HTTPURLResponse else { throw Failure.invalidReply }
-        guard http.statusCode == 200 else { throw Self.failure(status: http.statusCode) }
+        guard http.statusCode == 200 else {
+            if Self.neverReachedTheModel(status: http.statusCode) { budget.refund() }
+            throw Self.failure(status: http.statusCode)
+        }
 
         guard data.count <= 65_536, let reply = try? JSONDecoder().decode(Reply.self, from: data)
         else { throw Failure.invalidReply }
         return Self.resolve(reply, places: places)
+    }
+
+    /// The server turned the request away before asking the model: its own
+    /// limits (429), the counter or the model being unavailable (503), or a
+    /// request it wouldn't forward. Those don't use up the phone's allowance.
+    /// A 422 was the model declining, and a 502 or 504 came after it was asked.
+    static func neverReachedTheModel(status: Int) -> Bool {
+        status == 503 || ((400..<500).contains(status) && status != 422)
     }
 
     /// Only a short message of our own is shown, never the server's.

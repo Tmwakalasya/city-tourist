@@ -156,6 +156,24 @@ test("with KV, a repeat sign-up doesn't email you twice", async () => {
   assert.equal(calls.filter((c) => c.url.includes("resend")).length, 1);
 });
 
+test("a sign-up still goes through when the counter store can't be read or written", async () => {
+  const errors = [];
+  const original = console.error;
+  console.error = (...parts) => errors.push(parts.join(" "));
+  const broken = {
+    get: async () => { throw new Error("KV GET failed"); },
+    put: async () => { throw new Error("KV PUT failed: 429 daily limit"); },
+  };
+  try {
+    const result = await call({ email: "a@b.co" }, { ...supabaseEnv(), SIGNUPS: broken });
+    assert.equal(result.status, 200);
+    assert.equal(calls.length, 1);
+    assert.ok(errors.length >= 1);
+  } finally {
+    console.error = original;
+  }
+});
+
 test("anything but POST is refused", async () => {
   const response = onRequest();
   assert.equal(response.status, 405);

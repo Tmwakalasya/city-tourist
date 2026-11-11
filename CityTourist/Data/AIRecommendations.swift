@@ -296,7 +296,10 @@ struct AIRecommendationService {
         }
         try Task.checkCancellation()
         guard let http = response as? HTTPURLResponse else { throw Failure.invalidReply }
-        guard http.statusCode == 200 else { throw Self.failure(status: http.statusCode) }
+        guard http.statusCode == 200 else {
+            if TripDraftService.neverReachedTheModel(status: http.statusCode) { activeBudget.refund() }
+            throw Self.failure(status: http.statusCode)
+        }
         guard data.count <= 16_384, let reply = try? JSONDecoder().decode(Reply.self, from: data) else {
             throw Failure.invalidReply
         }
@@ -308,7 +311,6 @@ struct AIRecommendationService {
         switch status {
         // Everyone's allowance for the day, or this network's for the hour.
         case 429: .rejected("AI Concierge has had all the requests it can take for now. Try again later.")
-        case 502: .invalidReply
         case 500...599: .rejected("AI Concierge is busy right now. Try again in a minute.")
         default: .rejected("Suggestions couldn’t load. Please try again.")
         }

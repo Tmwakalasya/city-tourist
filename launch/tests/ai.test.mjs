@@ -4,14 +4,19 @@ import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import * as trip from "../functions/api/ai/trip.js";
 import * as concierge from "../functions/api/ai/concierge.js";
+import { cap, clip, caller, setRetryMs } from "../lib/claude.js";
 
 const SITE = "https://citytourist.pages.dev";
 const KEY = "sk-ant-test-key";
 let calls;
 let reply;
+let logged;
+setRetryMs(1);
 
 beforeEach(() => {
   calls = [];
+  logged = [];
+  console.error = (...parts) => { logged.push(parts.join(" ")); };
   reply = () => claude({ summary: "Two easy days.", days: [] });
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), headers: init.headers, body: JSON.parse(init.body) });
@@ -162,14 +167,19 @@ test("a declined, cut-off or unreadable draft is an error with our own words", a
   assert.equal((await post(trip, tripBody())).status, 502);
 });
 
-test("Claude's own errors never reach the caller", async () => {
+test("Claude's own errors never reach the caller, and are logged without the key", async () => {
   for (const [status, expected] of [[401, 502], [400, 502], [429, 503], [529, 503]]) {
-    reply = () => new Response(JSON.stringify({ error: { message: `invalid x-api-key ${KEY}` } }), { status });
+    reply = () => new Response(JSON.stringify({
+      error: { type: "authentication_error", message: `invalid x-api-key ${KEY}` },
+    }), { status });
     const result = await post(trip, tripBody());
     assert.equal(result.status, expected);
     assert.ok(!JSON.stringify(result.body).includes("sk-ant"));
     assert.ok(!JSON.stringify(result.body).includes("x-api-key"));
   }
+  assert.equal(logged.length, 4);
+  assert.match(logged[0], /claude refused 401 authentication_error claude-opus-5-5/);
+  assert.ok(!logged.join("\n").includes("sk-ant"), "the key is never logged");
   globalThis.fetch = async () => { throw new Error("network down"); };
   assert.equal((await post(trip, tripBody())).status, 504);
 });
@@ -183,12 +193,71 @@ test("without the key or the counter, nothing is sent", async () => {
   assert.equal(calls.length, 0);
 });
 
-test("one address gets twelve trip drafts an hour", async () => {
+test("one address gets forty trip drafts a day, a fifth of everyone's", async () => {
   const environment = env();
-  for (let i = 0; i < 12; i++) assert.equal((await post(trip, tripBody(), environment)).status, 200);
-  assert.equal((await post(trip, tripBody(), environment)).status, 429);
+  for (let i = 0; i < 40; i++) assert.equal((await post(trip, tripBody(), environment)).status, 200);
+  const over = await post(trip, tripBody(), environment);
+  assert.equal(over.status, 429);
+  assert.match(over.body.error, /from here today/);
   assert.equal((await post(trip, tripBody(), environment, { ip: "198.51.100.4" })).status, 200);
-  assert.equal(calls.length, 13);
+  assert.equal(calls.length, 41);
+});
+
+test("addresses in one IPv6 /64 count as one caller", async () => {
+  const at = (ip) => caller(new Request(SITE, { headers: { "cf-connecting-ip": ip } }));
+  assert.equal(at("2001:DB8:1:2:aaaa:bbbb:cccc:dddd"), at("2001:db8:1:2::1"));
+  assert.notEqual(at("2001:db8:1:2::1"), at("2001:db8:1:3::1"));
+  assert.equal(at("203.0.113.9"), "203.0.113.9");
+
+  const environment = env({ TRIP_DAILY_LIMIT: "1000" });
+  for (let i = 0; i < 40; i++) {
+    assert.equal((await post(trip, tripBody(), environment, { ip: `2001:db8:1:2::${i.toString(16)}` })).status, 200);
+  }
+  assert.equal((await post(trip, tripBody(), environment, { ip: "2001:db8:1:2::ffff" })).status, 429);
+});
+
+test("a counter write that fails once is tried again", async () => {
+  const store = kv();
+  let failures = 1;
+  const flaky = { ...store, put: async (k, v) => { if (failures-- > 0) throw new Error("429 Too Many Requests"); return store.put(k, v); } };
+  assert.equal((await post(trip, tripBody(), env({ SIGNUPS: flaky }))).status, 200);
+  assert.equal(calls.length, 1);
+});
+
+test("when the counter can't be written, the call is refused and nothing is spent", async () => {
+  const broken = { get: async () => null, put: async () => { throw new Error("KV PUT failed: 429 daily limit"); } };
+  const result = await post(trip, tripBody(), env({ SIGNUPS: broken }));
+  assert.equal(result.status, 503);
+  assert.match(result.body.error, /Busy right now/);
+  assert.equal(calls.length, 0);
+  assert.ok(logged.some((line) => line.includes("ai counter write failed")));
+
+  const unreadable = { get: async () => { throw new Error("KV GET failed"); }, put: async () => {} };
+  assert.equal((await post(concierge, conciergeBody(), env({ SIGNUPS: unreadable }))).status, 503);
+  assert.equal(calls.length, 0);
+});
+
+test("a blank limit means the default, not zero", () => {
+  assert.equal(cap("", 200), 200);
+  assert.equal(cap("   ", 200), 200);
+  assert.equal(cap(undefined, 200), 200);
+  assert.equal(cap("abc", 200), 200);
+  assert.equal(cap("0", 200), 0);
+  assert.equal(cap("50", 200), 50);
+});
+
+test("cutting text to length never leaves half a character", async () => {
+  assert.equal(clip("ab🍷", 3), "ab");
+  assert.equal(clip("ab🍷", 4), "ab🍷");
+  assert.equal(clip(undefined, 5), "");
+
+  reply = () => claude({ summary: "s".repeat(239) + "🍷", days: [{ theme: "t".repeat(59) + "🌅", stops: [
+    { id: "p1", start: "10:00", reason: "r".repeat(159) + "🍰" }] }] });
+  const result = await post(trip, tripBody());
+  const sent = JSON.stringify(result.body);
+  assert.ok(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(sent), "no lone surrogate");
+  assert.equal(result.body.summary.length, 239);
+  assert.equal(result.body.days[0].stops[0].reason.length, 159);
 });
 
 test("the day's cap holds across every address, and each endpoint has its own", async () => {
@@ -251,6 +320,12 @@ test("an invented, repeated or overlong pick spoils the whole answer", async () 
   }
   reply = () => claude({ summary: "x", picks: [] }, { stop: "max_tokens" });
   assert.equal((await post(concierge, conciergeBody())).status, 502);
+});
+
+test("a blank tag is dropped, not a reason to refuse the search", async () => {
+  reply = () => claude({ summary: "Lively.", picks: [] });
+  assert.equal((await post(concierge, conciergeBody({ candidates: [candidate("a", { tags: ["", "market", "  "] })] }))).status, 200);
+  assert.deepEqual(JSON.parse(calls[0].body.messages[0].content).candidates[0].tags, ["market"]);
 });
 
 test("a concierge request that isn't one is turned away before it costs anything", async () => {

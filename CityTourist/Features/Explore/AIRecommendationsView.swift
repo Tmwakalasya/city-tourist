@@ -308,19 +308,20 @@ struct AIRecommendationsView: View {
                             RatingLabel(rating: pick.place.rating, reviewCount: pick.place.reviewCount, size: 12)
                         }
                     }
-                    // The whole width, under the name. The address gives way;
-                    // the distance and the hours stay on one line each.
+                    // The whole width, under the name. The address gives way
+                    // first; at large text sizes the others shorten too
+                    // rather than push past the card's edge.
                     HStack(spacing: 5) {
                         Text(pick.place.neighborhood).captionStyle().lineLimit(1)
                         Text("·").foregroundStyle(Palette.inkFaint)
                         Text(L10n.format("%@ from centre", distance(for: pick.place))).captionStyle()
-                            .lineLimit(1).fixedSize()
+                            .lineLimit(1).layoutPriority(1)
                         if let open = pick.place.openLabel {
                             Text("·").foregroundStyle(Palette.inkFaint)
                             Text(open)
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(pick.place.isOpenNow == false ? Brand.rausch : Brand.babu)
-                                .lineLimit(1).fixedSize()
+                                .lineLimit(1).layoutPriority(1)
                         }
                     }
                 }

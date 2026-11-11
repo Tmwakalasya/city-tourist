@@ -6,7 +6,7 @@
 // keeps that safe is that a caller can't choose the model, the prompt, the
 // output shape or the size, and that the number of calls a day is capped.
 
-import { json, readJSON, underIPLimit } from "./request.js";
+import { json, readJSON } from "./request.js";
 
 const MESSAGES = "https://api.anthropic.com/v1/messages";
 
@@ -54,27 +54,82 @@ export function rating(value) {
 }
 
 /**
- * Counts this call against the caller's hourly allowance and the whole
- * service's daily one. Without the KV binding nothing can be counted, so
- * nothing is allowed: an uncounted endpoint is an open tab on the key.
+ * Who to count a request against. A home or a phone on IPv6 holds a whole /64
+ * and can pick a new address in it for every request, so those count as one.
  */
-export async function allow(env, request, name, { perIPPerHour, perDay }) {
+export function caller(request) {
+  const ip = request.headers.get("cf-connecting-ip") || "unknown";
+  return ip.includes(":") ? ip.toLowerCase().split(":").slice(0, 4).join(":") : ip;
+}
+
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// KV takes one write a second to a key.
+let retryMs = 1100;
+/** Tests shorten the wait between the two write attempts. */
+export function setRetryMs(ms) { retryMs = ms; }
+
+/**
+ * Adds one to a KV counter, or refuses when it has reached `limit`.
+ *
+ * KV isn't a lock: requests that arrive together read the same count, so a
+ * burst can pass a limit by its own size. The spend limit on the Claude key
+ * is what stops that mattering; see the README.
+ */
+async function count(env, key, limit, full) {
+  let used;
+  try {
+    used = Number(await env.SIGNUPS.get(key)) || 0;
+  } catch (error) {
+    console.error("ai counter read failed", key, String(error));
+    throw new Refused(503, "Busy right now. Try again in a minute.");
+  }
+  if (used >= limit) throw new Refused(429, full);
+  // A write can fail when two land on a key in the same second, or when the
+  // day's writes are used up. Try twice, then refuse: a call that can't be counted is a call that isn't capped.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await env.SIGNUPS.put(key, String(used + 1), { expirationTtl: 2 * 86400 });
+      return;
+    } catch (error) {
+      if (attempt === 1) {
+        console.error("ai counter write failed", key, String(error));
+        throw new Refused(503, "Busy right now. Try again in a minute.");
+      }
+      await pause(retryMs);
+    }
+  }
+}
+
+/**
+ * Counts this call against the caller's allowance for the day and against
+ * everyone's. Without the KV binding nothing can be counted, so nothing is
+ * allowed: an uncounted endpoint is an open tab on the key.
+ *
+ * `perIPPerDay` should stay well under `perDay`, so no one address can use up
+ * the day for everybody.
+ */
+export async function allow(env, request, name, { perIPPerDay, perDay }) {
   if (!env.ANTHROPIC_API_KEY || !env.SIGNUPS) {
     throw new Refused(503, "This isn't switched on yet.");
   }
-  if (!(await underIPLimit(env, request, `ai-${name}`, perIPPerHour))) {
-    throw new Refused(429, "Too many requests from here. Try again in an hour.");
-  }
-  const day = `ai-${name}:${new Date().toISOString().slice(0, 10)}`;
-  const used = Number(await env.SIGNUPS.get(day)) || 0;
-  if (used >= perDay) throw new Refused(429, "That's all for today. Try again tomorrow.");
-  await env.SIGNUPS.put(day, String(used + 1), { expirationTtl: 2 * 86400 });
+  const day = new Date().toISOString().slice(0, 10);
+  await count(env, `ai-${name}:${day}:${caller(request)}`, perIPPerDay,
+              "Too many requests from here today. Try again tomorrow.");
+  await count(env, `ai-${name}:${day}`, perDay, "That's all for today. Try again tomorrow.");
 }
 
-/** A daily cap from the project's variables, or the default. */
+/** A daily cap from the project's variables, or the default when unset or blank. */
 export function cap(value, fallback) {
+  if (value === undefined || value === null || String(value).trim() === "") return fallback;
   const number = Number(value);
   return Number.isInteger(number) && number >= 0 ? number : fallback;
+}
+
+/** At most `limit` UTF-16 units, without cutting a character in half. */
+export function clip(value, limit) {
+  const cut = String(value ?? "").slice(0, limit);
+  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
 }
 
 /**
@@ -100,8 +155,14 @@ export async function ask(env, body, { version, beta, timeoutMs }) {
   } catch {
     throw new Refused(504, "That took too long. Try again.");
   }
-  if (response.status === 429 || response.status >= 500) throw new Refused(503, "Busy right now. Try again in a minute.");
-  if (!response.ok) throw new Refused(502, "That couldn't be done. Try again.");
+  if (!response.ok) {
+    // The status and the error's type, for the logs. Never the message or the
+    // body: they aren't ours to show, and the caller gets words of our own.
+    const type = await response.json().then((reply) => reply?.error?.type, () => undefined);
+    console.error("claude refused", response.status, String(type ?? ""), body.model);
+    if (response.status === 429 || response.status >= 500) throw new Refused(503, "Busy right now. Try again in a minute.");
+    throw new Refused(502, "That couldn't be done. Try again.");
+  }
 
   let envelope;
   try {
@@ -122,6 +183,7 @@ export async function answer(work) {
     return json(await work());
   } catch (error) {
     if (error instanceof Refused) return json({ error: error.message }, error.status);
+    console.error("ai endpoint failed", String(error?.stack || error));
     return json({ error: "That couldn't be done. Try again." }, 500);
   }
 }

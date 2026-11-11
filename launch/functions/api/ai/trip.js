@@ -10,12 +10,13 @@
 //   TRIP_DAILY_LIMIT   optional, default 200 drafts a day across everyone
 // The SIGNUPS KV binding is required: it holds the counts.
 
-import { Refused, body, text, integer, rating, allow, cap, ask, answer } from "../../../lib/claude.js";
+import { Refused, body, text, integer, rating, allow, cap, clip, ask, answer } from "../../../lib/claude.js";
 
 const MAX_BODY_BYTES = 48_000;
 const MAX_PLACES = 60;
 const MAX_DAYS = 7;
-const PER_IP_PER_HOUR = 12;
+// A fifth of the day's cap, so it takes several addresses to use it up.
+const PER_IP_PER_DAY = 40;
 const PER_DAY = 200;
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const KINDS = ["attraction", "food", "museum", "nature", "activity", "nightlife", "relaxation"];
@@ -121,9 +122,9 @@ export function tidy(raw, placeCount) {
     throw new Refused(502, "The plan couldn't be read. Try again.");
   }
   return {
-    summary: reply.summary.slice(0, 240),
+    summary: clip(reply.summary, 240),
     days: reply.days.slice(0, MAX_DAYS).map((day) => ({
-      theme: String(day?.theme ?? "").slice(0, 60),
+      theme: clip(day?.theme, 60),
       stops: (Array.isArray(day?.stops) ? day.stops : [])
         .filter((stop) => {
           const number = /^p(\d{1,2})$/.exec(String(stop?.id ?? ""));
@@ -133,7 +134,7 @@ export function tidy(raw, placeCount) {
         .map((stop) => ({
           id: stop.id,
           start: String(stop.start ?? "").slice(0, 5),
-          reason: String(stop.reason ?? "").slice(0, 160),
+          reason: clip(stop.reason, 160),
         })),
     })),
   };
@@ -144,7 +145,7 @@ export function onRequestPost({ request, env }) {
     const payload = validate(await body(request, { maxBytes: MAX_BODY_BYTES, wrongOrigin: "Plan trips from the City Tourist app." }));
 
     await allow(env, request, "trip", {
-      perIPPerHour: PER_IP_PER_HOUR,
+      perIPPerDay: PER_IP_PER_DAY,
       perDay: cap(env.TRIP_DAILY_LIMIT, PER_DAY),
     });
 

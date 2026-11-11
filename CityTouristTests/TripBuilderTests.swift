@@ -371,7 +371,8 @@ extension PlacesAPITests {
                                          dates: tripDates, candidates: places)
 
         let sent = try #require(StubURLProtocol.recorded.first)
-        #expect(sent.url?.absoluteString == "https://citytourist.pages.dev/api/ai/trip")
+        #expect(sent.url == TripDraftService.endpoint)
+        #expect(sent.url?.scheme == "https" && sent.url?.lastPathComponent == "trip")
         #expect(sent.httpMethod == "POST")
         #expect(sent.value(forHTTPHeaderField: "x-api-key") == nil, "the key lives on the server")
         #expect(sent.value(forHTTPHeaderField: "Authorization") == nil)
@@ -460,6 +461,25 @@ extension PlacesAPITests {
                                                           dates: tripDates, candidates: tripPlaces)
         }
         #expect(StubURLProtocol.recorded.isEmpty)
+    }
+
+    /// The server's own limits, an outage or a refused request never reached
+    /// the model, so they don't use up the phone's allowance. A plan the
+    /// model declined or garbled did.
+    @Test func aDraftTheServerTurnedAwayIsHandedBack() async throws {
+        for (status, handedBack) in [(429, true), (503, true), (400, true), (413, true),
+                                     (422, false), (502, false), (504, false)] {
+            StubURLProtocol.reset()
+            StubURLProtocol.respond(status: status, json: #"{"error":"no"}"#)
+            let budget = RequestBudget(name: "test", limits: .init(perMinute: 1, perDay: 1), defaults: nil)
+            let service = tripDrafts(budget: budget)
+
+            await #expect(throws: TripDraftService.Failure.self) {
+                _ = try await service.draft(request: "x", city: SampleData.cities[0],
+                                            dates: tripDates, candidates: tripPlaces)
+            }
+            #expect(budget.spend() == handedBack, "status \(status)")
+        }
     }
 
     @Test func anOfflineTripDraftIsHandedBack() async throws {

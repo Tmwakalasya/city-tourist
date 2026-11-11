@@ -14,7 +14,8 @@ import { Refused, body, text, integer, rating, allow, cap, ask, answer } from ".
 
 const MAX_BODY_BYTES = 40_000;
 const MAX_CANDIDATES = 20;
-const PER_IP_PER_HOUR = 30;
+// A fifth of the day's cap, so it takes several addresses to use it up.
+const PER_IP_PER_DAY = 120;
 const PER_DAY = 600;
 
 const SYSTEM = `You are City Tourist's local travel concierge. Select the strongest matching places for the traveller's request strictly from the supplied \`candidates\` list.
@@ -57,7 +58,8 @@ export function validate(sent) {
         category: text(entry.category, 60),
         area: text(entry.area, 600, { allowEmpty: true }),
         description: text(entry.description, 1200, { allowEmpty: true }),
-        tags: entry.tags.map((tag) => text(tag, 150)),
+        // A blank tag is dropped, not a reason to turn the whole request away.
+        tags: entry.tags.map((tag) => text(tag, 150, { allowEmpty: true })).filter(Boolean),
         rating: rating(entry.rating),
         reviewCount: integer(entry.reviewCount, 0, 30_000_000),
         distanceMetresFromCentre: integer(entry.distanceMetresFromCentre, 0, 30_000_000),
@@ -107,7 +109,7 @@ export function onRequestPost({ request, env }) {
     const payload = validate(await body(request, { maxBytes: MAX_BODY_BYTES, wrongOrigin: "Ask from the City Tourist app." }));
 
     await allow(env, request, "concierge", {
-      perIPPerHour: PER_IP_PER_HOUR,
+      perIPPerDay: PER_IP_PER_DAY,
       perDay: cap(env.CONCIERGE_DAILY_LIMIT, PER_DAY),
     });
 
