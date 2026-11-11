@@ -211,17 +211,15 @@ struct TripBuilderView: View {
         let text = fullRequest
         let dates = dates
         let service = TripDraftService()
-        let draft: (([Place]) async throws -> TripDraftService.Draft)? = service.map { service in
-            { places in
-                try await service.draft(request: text, city: city, dates: dates, candidates: places,
-                                        language: L10n.languageName)
-            }
+        let draft: (([Place]) async throws -> TripDraftService.Draft)? = { places in
+            try await service.draft(request: text, city: city, dates: dates, candidates: places,
+                                    language: L10n.languageName)
         }
         await model.run(builder: builder, find: {
             await catalog.load(city: city)
             var batches: [[Place]] = []
             // Extra searches only help a draft that reads the request.
-            if service != nil, catalog.isLiveDataAvailable {
+            if catalog.isLiveDataAvailable {
                 for term in TripDraftService.searchTerms(for: text) {
                     if let page = try? await catalog.searchPlaces(query: term, city: city) {
                         batches.append(page.places)

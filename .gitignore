@@ -1,5 +1,10 @@
 # Never commit API keys
 CityTourist/Resources/Secrets.plist
+# Local secrets for `wrangler pages dev`
+.dev.vars
+.env
+.env.*
+*.p8
 
 # Xcode
 build/

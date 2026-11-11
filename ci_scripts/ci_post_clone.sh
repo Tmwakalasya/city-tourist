@@ -26,7 +26,7 @@ inject_key() {
 }
 
 inject_key "GooglePlacesAPIKey"     "GOOGLE_PLACES_API_KEY"
-inject_key "AnthropicAPIKey"        "ANTHROPIC_API_KEY"
+inject_key "AIProxyURL"             "AI_PROXY_URL"
 inject_key "TicketmasterAPIKey"     "TICKETMASTER_API_KEY"
 inject_key "YouTubeAPIKey"          "YOUTUBE_API_KEY"
 inject_key "FeedbackEmail"          "FEEDBACK_EMAIL"

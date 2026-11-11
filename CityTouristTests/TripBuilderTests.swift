@@ -338,7 +338,7 @@ struct TripBuildingTests {
     }
 }
 
-/// The request to Claude and its reply, against the shared stub; see
+/// The request to the server and its reply, against the shared stub; see
 /// `PlacesAPITests`.
 extension PlacesAPITests {
 
@@ -349,16 +349,7 @@ extension PlacesAPITests {
     }
 
     private func tripDrafts(budget: RequestBudget = .unlimited) -> TripDraftService {
-        TripDraftService(apiKey: "test-key", session: StubURLProtocol.makeSession(), budget: budget)
-    }
-
-    /// The Messages API's envelope around the model's JSON.
-    private func claudeReply(_ reply: String, stopReason: String = "end_turn") -> String {
-        let envelope: [String: Any] = [
-            "stop_reason": stopReason,
-            "content": [["type": "thinking", "thinking": ""], ["type": "text", "text": reply]]
-        ]
-        return String(decoding: try! JSONSerialization.data(withJSONObject: envelope), as: UTF8.self)
+        TripDraftService(session: StubURLProtocol.makeSession(), budget: budget)
     }
 
     private static let draftedTrip = """
@@ -372,7 +363,7 @@ extension PlacesAPITests {
 
     @Test func aTripDraftRequestCarriesTheTripAndNothingPrivate() async throws {
         StubURLProtocol.reset()
-        StubURLProtocol.respond(json: claudeReply(Self.draftedTrip))
+        StubURLProtocol.respond(json: Self.draftedTrip)
         var places = tripPlaces
         places[0].photoName = "places/secret/photos/not-for-the-model"
 
@@ -380,21 +371,15 @@ extension PlacesAPITests {
                                          dates: tripDates, candidates: places)
 
         let sent = try #require(StubURLProtocol.recorded.first)
-        #expect(sent.url?.absoluteString == "https://api.anthropic.com/v1/messages")
-        #expect(sent.value(forHTTPHeaderField: "x-api-key") == "test-key")
-        #expect(sent.value(forHTTPHeaderField: "anthropic-version") == "2026-10-21")
-        #expect(sent.value(forHTTPHeaderField: "anthropic-beta") == "server-side-fallback-2026-07-01")
+        #expect(sent.url?.absoluteString == "https://citytourist.pages.dev/api/ai/trip")
+        #expect(sent.httpMethod == "POST")
+        #expect(sent.value(forHTTPHeaderField: "x-api-key") == nil, "the key lives on the server")
+        #expect(sent.value(forHTTPHeaderField: "Authorization") == nil)
 
-        let body = try #require(sent.stubBody)
-        #expect(body["model"] as? String == "claude-opus-5-5")
-        #expect(body["fallbacks"] as? String == "default")
-        #expect(body["temperature"] == nil)
-        let config = try #require(body["output_config"] as? [String: Any])
-        #expect(config["effort"] as? String == "low")
-        #expect((config["format"] as? [String: Any])?["type"] as? String == "json_schema")
-
-        let message = try #require((body["messages"] as? [[String: Any]])?.first?["content"] as? String)
-        let payload = try #require(JSONSerialization.jsonObject(with: Data(message.utf8)) as? [String: Any])
+        let payload = try #require(sent.stubBody)
+        #expect(payload["model"] == nil && payload["system"] == nil && payload["messages"] == nil,
+                "the prompt and the model are the server's to choose")
+        let message = String(decoding: try JSONSerialization.data(withJSONObject: payload), as: UTF8.self)
         #expect(payload["request"] as? String == "Slow mornings")
         #expect(payload["language"] as? String == "English")
         let days = try #require(payload["days"] as? [[String: Any]])
@@ -405,12 +390,11 @@ extension PlacesAPITests {
         #expect(sentPlaces.first?["name"] as? String == places[0].name)
         #expect(!message.contains("not-for-the-model"))
         #expect(!message.contains(places[0].id), "Google's ids stay in the app")
-        #expect(!message.contains("test-key"))
     }
 
     @Test func aDraftedTripComesBackAsPlacesAndTimes() async throws {
         StubURLProtocol.reset()
-        StubURLProtocol.respond(json: claudeReply(Self.draftedTrip))
+        StubURLProtocol.respond(json: Self.draftedTrip)
 
         let draft = try await tripDrafts().draft(request: "Slow mornings", city: SampleData.cities[0],
                                                  dates: tripDates, candidates: tripPlaces)
@@ -424,14 +408,14 @@ extension PlacesAPITests {
     }
 
     @Test func aDeclinedCutOffOrUnreadableDraftIsAnError() async {
-        for (json, expected) in [
-            (claudeReply("", stopReason: "refusal"), TripDraftService.Failure.declined),
-            (claudeReply(String(Self.draftedTrip.prefix(80)), stopReason: "max_tokens"), .invalidReply),
-            (claudeReply("Here is your trip!"), .invalidReply),
-            ("{}", .invalidReply)
+        for (status, json, expected) in [
+            (422, #"{"error":"That request couldn't be planned."}"#, TripDraftService.Failure.declined),
+            (200, String(Self.draftedTrip.prefix(80)), .invalidReply),
+            (200, "Here is your trip!", .invalidReply),
+            (200, "{}", .invalidReply)
         ] {
             StubURLProtocol.reset()
-            StubURLProtocol.respond(json: json)
+            StubURLProtocol.respond(status: status, json: json)
             await #expect(throws: expected) {
                 _ = try await tripDrafts().draft(request: "x", city: SampleData.cities[0],
                                                  dates: tripDates, candidates: tripPlaces)
@@ -439,23 +423,36 @@ extension PlacesAPITests {
         }
     }
 
-    @Test func aRejectedKeyIsReportedWithoutTheServersWords() async {
-        StubURLProtocol.reset()
-        StubURLProtocol.respond(status: 401, json: #"{"error":{"message":"invalid x-api-key sk-ant-leaked"}}"#)
+    @Test func aServerFailureIsReportedWithoutTheServersWords() async {
+        for status in [429, 502, 503] {
+            StubURLProtocol.reset()
+            StubURLProtocol.respond(status: status, json: #"{"error":"upstream said sk-ant-leaked"}"#)
 
-        do {
-            _ = try await tripDrafts().draft(request: "x", city: SampleData.cities[0],
-                                             dates: tripDates, candidates: tripPlaces)
-            Issue.record("a 401 should fail")
-        } catch {
-            #expect(!error.localizedDescription.contains("sk-ant"))
-            #expect(error.localizedDescription.contains("key"))
+            do {
+                _ = try await tripDrafts().draft(request: "x", city: SampleData.cities[0],
+                                                 dates: tripDates, candidates: tripPlaces)
+                Issue.record("a \(status) should fail")
+            } catch {
+                #expect(!error.localizedDescription.contains("sk-ant"))
+                #expect(error.localizedDescription.localizedCaseInsensitiveContains("try again"))
+            }
         }
+    }
+
+    /// Everything in the bundle can be read out of the app, so a key that
+    /// spends money for whoever holds it must never be in it.
+    @Test func noClaudeKeyShipsInTheApp() throws {
+        guard let url = Bundle.main.url(forResource: "Secrets", withExtension: "plist") else { return }
+        // A Bool on its own line: a failed expectation prints what it compared,
+        // and that must never be the file's contents.
+        let holdsClaudeKey = String(decoding: try Data(contentsOf: url), as: UTF8.self).contains("sk-ant-")
+        #expect(!holdsClaudeKey,
+                "Secrets.plist holds a Claude key. Remove that row: the key belongs to the server (launch/README.md).")
     }
 
     @Test func aTripDraftOverThePhonesAllowanceSendsNothing() async {
         StubURLProtocol.reset()
-        StubURLProtocol.respond(json: claudeReply(Self.draftedTrip))
+        StubURLProtocol.respond(json: Self.draftedTrip)
         let spent = RequestBudget(name: "test", limits: .init(perMinute: 0, perDay: 0), defaults: nil)
 
         await #expect(throws: TripDraftService.Failure.rateLimited) {
@@ -475,7 +472,7 @@ extension PlacesAPITests {
             _ = try await service.draft(request: "x", city: SampleData.cities[0],
                                         dates: tripDates, candidates: tripPlaces)
         }
-        StubURLProtocol.respond(json: claudeReply(Self.draftedTrip))
+        StubURLProtocol.respond(json: Self.draftedTrip)
         let draft = try await service.draft(request: "x", city: SampleData.cities[0],
                                             dates: tripDates, candidates: tripPlaces)
         #expect(!draft.days.isEmpty, "back online, the one draft left still goes out")
@@ -483,7 +480,7 @@ extension PlacesAPITests {
 
     @Test func onlyAWeekAndSixtyPlacesAreSent() async throws {
         StubURLProtocol.reset()
-        StubURLProtocol.respond(json: claudeReply(Self.draftedTrip))
+        StubURLProtocol.respond(json: Self.draftedTrip)
         let monday = tripDates[0]
         let fortnight = (0..<14).map { Calendar.current.date(byAdding: .day, value: $0, to: monday)! }
         let many = (0..<80).map { index -> Place in
@@ -494,9 +491,7 @@ extension PlacesAPITests {
 
         _ = try await tripDrafts().draft(request: "x", city: SampleData.cities[0], dates: fortnight, candidates: many)
 
-        let message = try #require((StubURLProtocol.recorded.first?.stubBody?["messages"] as? [[String: Any]])?
-            .first?["content"] as? String)
-        let payload = try #require(JSONSerialization.jsonObject(with: Data(message.utf8)) as? [String: Any])
+        let payload = try #require(StubURLProtocol.recorded.first?.stubBody)
         #expect((payload["days"] as? [Any])?.count == TripDraftService.maxDays)
         #expect((payload["places"] as? [Any])?.count == TripDraftService.maxCandidates)
     }

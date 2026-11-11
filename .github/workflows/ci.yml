@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   web-and-relay-tests:
-    name: Web, Supabase & AI Relay Tests
+    name: Web, Supabase & AI Endpoint Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -24,9 +24,6 @@ jobs:
 
       - name: Run Cloudflare Pages & Supabase Function tests
         run: node --test launch/tests/*.test.mjs launch/supabase/functions/eventbrite/*.test.mjs
-
-      - name: Run Python AI relay unit tests
-        run: python3 -B -m unittest discover -s prototype -p 'test_*.py' -v
 
   ios-build-and-test:
     name: iOS Build & Unit Tests
@@ -43,7 +40,6 @@ jobs:
       - name: Prepare Secrets.plist
         env:
           GOOGLE_PLACES_API_KEY: ${{ secrets.GOOGLE_PLACES_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TICKETMASTER_API_KEY: ${{ secrets.TICKETMASTER_API_KEY }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           FEEDBACK_EMAIL: ${{ secrets.FEEDBACK_EMAIL }}

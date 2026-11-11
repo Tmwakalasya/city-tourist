@@ -484,7 +484,7 @@
 "The plan came back in a form the app couldn’t read. Try again." = "Le programme est revenu sous une forme que l’app n’a pas pu lire. Réessayez.";
 "You’ve reached today’s AI limit on this device. Try again tomorrow, or build a starter plan without it." = "Vous avez atteint la limite d’IA du jour sur cet appareil. Réessayez demain ou créez un programme de départ sans elle.";
 "That request couldn’t be planned. Try describing the trip another way." = "Cette demande n’a pas pu être planifiée. Essayez de décrire le voyage autrement.";
-"The AI key in this build was rejected, so the trip couldn’t be drafted." = "La clé d’IA de cette version a été refusée, le voyage n’a donc pas pu être préparé.";
+"The trip builder has had all the requests it can take for now. Try again later." = "Le créateur de voyage a reçu toutes les demandes qu’il peut traiter pour le moment. Réessayez plus tard.";
 "The trip builder is busy right now. Try again in a minute." = "Le créateur de voyage est très sollicité. Réessayez dans une minute.";
 "The trip couldn’t be drafted. Try again." = "Le voyage n’a pas pu être préparé. Réessayez.";
 "No places could be loaded for this city. Check your connection and try again." = "Aucun lieu n’a pu être chargé pour cette ville. Vérifiez votre connexion et réessayez.";

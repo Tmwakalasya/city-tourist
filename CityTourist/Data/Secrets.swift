@@ -5,6 +5,11 @@ import Foundation
 /// Order: `Secrets.plist` in the app bundle, then an environment variable on
 /// the scheme. Keys never go in source control — `Secrets.plist` is gitignored
 /// and `Secrets.example.plist` shows the shape.
+///
+/// Whatever is in the bundle ships to every phone and can be read out of the
+/// app, so only keys that are safe there go here: ones Google restricts to
+/// this app's bundle ID, and public ones. A key that spends money for whoever
+/// holds it (Claude's) stays on the server.
 enum Secrets {
     static let supabaseURL = key("SupabaseURL", orEnvironment: "SUPABASE_URL")
     static let supabasePublishableKey = key("SupabasePublishableKey", orEnvironment: "SUPABASE_PUBLISHABLE_KEY")
@@ -26,54 +31,20 @@ enum Secrets {
     /// row isn't shown. Kept out of source like the keys.
     static let feedbackEmail: String? = key("FeedbackEmail", orEnvironment: "FEEDBACK_EMAIL")
 
-    /// Optional: Claude API key for the AI Concierge feature in beta.
-    static let anthropicAPIKey: String? = {
-        if let direct = key("AnthropicAPIKey", orEnvironment: "ANTHROPIC_API_KEY")
-            ?? key("ANTHROPIC_API_KEY", orEnvironment: "ANTHROPIC_API_KEY")
-            ?? key("ClaudeAPIKey", orEnvironment: "CLAUDE_API_KEY") {
-            return direct
+    /// Where the AI concierge and the trip builder send their requests: the
+    /// launch site's `/api/ai`, which holds the Claude key. No AI key belongs
+    /// in the app or in Secrets.plist; everything in the bundle can be read
+    /// by anyone who has the app. `AIProxyURL` points a build at another
+    /// deployment.
+    static let aiBaseURL: URL = {
+        if let raw = key("AIProxyURL", orEnvironment: "AI_PROXY_URL"),
+           let url = URL(string: raw), url.scheme == "https", url.host != nil {
+            return url
         }
-        guard let url = Bundle.main.url(forResource: "Secrets", withExtension: "plist"),
-              let data = try? Data(contentsOf: url),
-              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
-            return nil
-        }
-        // 1. Match any value or key in Secrets.plist starting with "sk-ant-"
-        // (covers accidental paste into Xcode's "New item" Key column as well).
-        for (dictKey, dictValue) in plist {
-            if let strVal = dictValue as? String {
-                let trimmedVal = strVal.trimmingCharacters(in: .whitespacesAndNewlines)
-                if trimmedVal.hasPrefix("sk-ant-") { return trimmedVal }
-            }
-            let trimmedKey = dictKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmedKey.hasPrefix("sk-ant-") { return trimmedKey }
-        }
-        // 2. Match any non-standard row added to Secrets.plist (e.g., "New item", "AnthropicKey", "Claude").
-        let standardKeys: Set<String> = [
-            "supabaseurl", "supabasepublishablekey", "eventbriteproxyurl", "googleplacesapikey", "ticketmasterapikey", "youtubeapikey", "feedbackemail", "sharebaseurl"
-        ]
-        for (dictKey, dictValue) in plist where !standardKeys.contains(dictKey.localizedLowercase) {
-            if let strVal = dictValue as? String, isUsable(strVal) {
-                return strVal.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-            if isUsable(dictKey), dictKey.localizedLowercase != "new item" {
-                return dictKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-        }
-        return nil
+        return URL(string: defaultAIBaseURL)!
     }()
 
-    static var hasAnthropicKey: Bool { anthropicAPIKey != nil }
-
-    /// Key names present in Secrets.plist (never values), used only for diagnostics.
-    static var plistKeyNames: [String] {
-        guard let url = Bundle.main.url(forResource: "Secrets", withExtension: "plist"),
-              let data = try? Data(contentsOf: url),
-              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
-            return []
-        }
-        return plist.keys.sorted()
-    }
+    static let defaultAIBaseURL = "https://citytourist.pages.dev/api/ai"
 
     private static func key(_ name: String, orEnvironment variable: String) -> String? {
         if let url = Bundle.main.url(forResource: "Secrets", withExtension: "plist"),
