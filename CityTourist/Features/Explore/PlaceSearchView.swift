@@ -25,7 +25,8 @@ struct PlaceSearchView: View {
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var hasQuery: Bool { !trimmedQuery.isEmpty }
     private var visiblePlaces: [Place] {
-        let catalogPlaces = catalog.places(in: city.id).sorted { $0.rating > $1.rating }
+        let places = catalog.places(in: city.id)
+        let catalogPlaces = category == nil ? PlaceRanking.mixed(places) : PlaceRanking.ranked(places)
         let candidates: [Place]
         if hasQuery {
             if state == .idle {

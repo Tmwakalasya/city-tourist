@@ -16,9 +16,9 @@ struct ExploreView: View {
     private var city: City { store.browsingCity }
 
     private var results: [Place] {
-        catalog.places(in: store.browsingCityID)
-            .filter { category == nil || $0.category == category }
-            .sorted { $0.rating > $1.rating }
+        let places = catalog.places(in: store.browsingCityID)
+        guard let category else { return PlaceRanking.mixed(places) }
+        return PlaceRanking.ranked(places.filter { $0.category == category })
     }
 
     private var cityEvents: [Place] {
@@ -56,7 +56,7 @@ struct ExploreView: View {
                                 ListingCard(
                                     place: place,
                                     isSaved: store.isSaved(place),
-                                    // Airbnb badges its top result; ours flags the highest rated.
+                                    // The best of the city by `PlaceRanking`.
                                     badge: index == 0 && category == nil ? "Traveller favourite" : nil,
                                     onAddToTrip: { placeToAdd = place }
                                 ) {
@@ -220,7 +220,7 @@ struct ExploreView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(category?.title ?? "Top rated in \(city.name)")
+                Text(category?.title ?? "Best of \(city.name)")
                     .sectionTitleStyle()
                 if !city.tagline.isEmpty {
                     Text(city.tagline)

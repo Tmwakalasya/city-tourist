@@ -105,14 +105,8 @@ struct TripDraftService {
             result.append(place)
         }
 
-        // Sparse ratings shrink toward 4.0, as in `FirstDayPlanner`.
-        func quality(_ place: Place) -> Double {
-            let count = Double(max(0, place.reviewCount))
-            return (place.rating * count + 4 * 50) / (count + 50)
-        }
         var byKind = Dictionary(uniqueKeysWithValues: PlaceCategory.allCases.map { kind in
-            (kind, catalog.filter { $0.category == kind && usable($0) }
-                .sorted { (quality($0), $0.id) > (quality($1), $1.id) })
+            (kind, PlaceRanking.ranked(catalog.filter { $0.category == kind && usable($0) }))
         })
         // Food comes round twice: every day needs two meals but only so many sights.
         let turns = [PlaceCategory.food] + PlaceCategory.allCases

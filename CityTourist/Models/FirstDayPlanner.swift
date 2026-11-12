@@ -109,11 +109,10 @@ struct FirstDayPlanner {
         }.sorted { $0.id < $1.id }
     }
 
+    /// `PlaceRanking`'s score, scaled so a point of it is worth about thirteen
+    /// minutes of extra travel.
     private func quality(_ place: Place) -> Double {
-        // Shrink sparse ratings toward 4.0 so one five-star review cannot
-        // outrank hundreds of strong reviews by itself.
-        let count = Double(max(0, place.reviewCount))
-        return ((place.rating * count + 4 * 50) / (count + 50)) * 20
+        PlaceRanking.score(place) * 20
     }
 
     private func travel(_ proposal: [Suggestion]) -> Int {

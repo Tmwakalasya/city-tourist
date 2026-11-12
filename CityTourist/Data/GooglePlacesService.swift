@@ -131,7 +131,7 @@ struct GooglePlacesService {
                     byID[place.id] = place
                 }
             }
-            return Array(byID.values).sorted { $0.rating > $1.rating }
+            return PlaceRanking.ranked(Array(byID.values))
         }
     }
 
@@ -352,9 +352,20 @@ struct GooglePlacesService {
         }
     }
 
+    /// A spa, sauna, bathhouse or yoga studio, but not a salon, gym or hotel
+    /// that also lists a spa: those aren't what a visitor is looking for.
     static func isWellness(types: [String]) -> Bool {
-        !Set(types).isDisjoint(with: ["spa", "sauna", "wellness_center", "massage_spa", "yoga_studio"])
+        let set = Set(types)
+        return !set.isDisjoint(with: ["spa", "sauna", "wellness_center", "massage_spa", "yoga_studio"])
+            && set.isDisjoint(with: wellnessLookalikes)
     }
+
+    static let wellnessLookalikes: Set<String> = [
+        "hair_salon", "hair_care", "beauty_salon", "nail_salon", "barber_shop",
+        "beautician", "makeup_artist", "tanning_studio",
+        "gym", "fitness_center",
+        "lodging", "hotel", "resort_hotel", "motel", "inn", "guest_house", "hostel", "bed_and_breakfast"
+    ]
 
     static func category(fromTypes types: [String], fallback: PlaceCategory) -> PlaceCategory {
         let set = Set(types)
