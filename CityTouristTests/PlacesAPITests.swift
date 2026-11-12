@@ -85,6 +85,7 @@ struct PlacesAPITests {
 
         let body = try #require(request.stubBody)
         #expect(body["includedTypes"] as? [String] == ["restaurant", "cafe", "bakery"])
+        #expect(body["excludedTypes"] == nil, "a restaurant with a bar is still somewhere to eat")
         #expect(body["maxResultCount"] as? Int == 20)
         let circle = (body["locationRestriction"] as? [String: Any])?["circle"] as? [String: Any]
         #expect(circle?["radius"] as? Double == 12_000)
