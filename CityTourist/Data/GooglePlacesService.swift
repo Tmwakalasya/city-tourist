@@ -79,7 +79,7 @@ struct GooglePlacesService {
         authorize(&request)
         request.setValue(Self.fieldMask, forHTTPHeaderField: "X-Goog-FieldMask")
 
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "includedTypes": Self.includedTypes(for: category),
             "maxResultCount": 20,
             "rankPreference": "POPULARITY",
@@ -93,6 +93,8 @@ struct GooglePlacesService {
                 ]
             ]
         ]
+        let excluded = Self.excludedTypes(for: category)
+        if !excluded.isEmpty { body["excludedTypes"] = excluded }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await send(request, prepaid: prepaid)
@@ -352,20 +354,53 @@ struct GooglePlacesService {
         }
     }
 
+    /// A spa, sauna, bathhouse or yoga studio, but not a salon, gym or hotel
+    /// that also lists a spa: those aren't what a visitor is looking for.
     static func isWellness(types: [String]) -> Bool {
-        !Set(types).isDisjoint(with: ["spa", "sauna", "wellness_center", "massage_spa", "yoga_studio"])
+        let set = Set(types)
+        return !set.isDisjoint(with: ["spa", "sauna", "wellness_center", "massage_spa", "yoga_studio"])
+            && set.isDisjoint(with: wellnessLookalikes)
     }
 
+    static let wellnessLookalikes: Set<String> = [
+        "hair_salon", "hair_care", "beauty_salon", "nail_salon", "barber_shop",
+        "beautician", "makeup_artist", "tanning_studio",
+        "gym", "fitness_center",
+        "lodging", "hotel", "resort_hotel", "motel", "inn", "guest_house", "hostel", "bed_and_breakfast"
+    ]
+
+    private static let nightlifeTypes = ["night_club", "bar", "pub", "wine_bar"]
+    private static let museumTypes = ["museum", "art_gallery", "performing_arts_theater"]
+    private static let foodTypes = ["restaurant", "cafe", "bakery", "meal_takeaway"]
+    private static let activityTypes = ["market", "shopping_mall", "amusement_park", "zoo"]
+    private static let natureTypes = ["park", "garden", "national_park", "hiking_area", "beach"]
+
+    /// A place has one category, decided in this order. A zoo or a market is
+    /// something to do even when Google also calls it a tourist attraction.
     static func category(fromTypes types: [String], fallback: PlaceCategory) -> PlaceCategory {
         let set = Set(types)
         if isWellness(types: types) { return .relaxation }
-        if !set.isDisjoint(with: ["night_club", "bar", "pub", "wine_bar"]) { return .nightlife }
-        if !set.isDisjoint(with: ["museum", "art_gallery", "performing_arts_theater"]) { return .museum }
-        if !set.isDisjoint(with: ["restaurant", "cafe", "bakery", "meal_takeaway", "food"]) { return .food }
-        if !set.isDisjoint(with: ["park", "garden", "national_park", "hiking_area", "beach"]) { return .nature }
+        if !set.isDisjoint(with: nightlifeTypes) { return .nightlife }
+        if !set.isDisjoint(with: museumTypes) { return .museum }
+        if !set.isDisjoint(with: foodTypes + ["food"]) { return .food }
+        if !set.isDisjoint(with: activityTypes) { return .activity }
+        if !set.isDisjoint(with: natureTypes) { return .nature }
         if !set.isDisjoint(with: ["tourist_attraction", "historical_landmark", "monument", "church", "place_of_worship"]) { return .attraction }
-        if !set.isDisjoint(with: ["market", "shopping_mall", "amusement_park", "zoo"]) { return .activity }
         return fallback == .relaxation ? .activity : fallback
+    }
+
+    /// What a category's request asks Google to leave out. A request returns
+    /// twenty places at most, so each one that `category(fromTypes:)` would
+    /// file under another category, or that isn't wellness at all, is a place
+    /// this category goes without. Miami's landmarks came back as eight.
+    static func excludedTypes(for category: PlaceCategory) -> [String] {
+        switch category {
+        case .attraction: nightlifeTypes + museumTypes + foodTypes + activityTypes + natureTypes
+        case .nature:     nightlifeTypes + museumTypes + foodTypes + activityTypes
+        case .activity:   nightlifeTypes + museumTypes + foodTypes
+        case .relaxation: wellnessLookalikes.sorted()
+        case .food, .museum, .nightlife: []
+        }
     }
 
     /// Google doesn't publish visit lengths, so we estimate from the category —
