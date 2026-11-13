@@ -63,6 +63,15 @@ struct VisitorPlacesTests {
         #expect(GooglePlacesService.category(primaryType: nil, fromTypes: ["restaurant", "bar"], fallback: .food) == .nightlife)
     }
 
+    /// Palm Bay's chamber of commerce came back as a landmark when load-more
+    /// took a search's guess for a category.
+    @Test func aPlaceNoTypeExplainsBelongsToNoCategory() {
+        #expect(GooglePlacesService.recognisedCategory(primaryType: "corporate_office", types: ["corporate_office", "point_of_interest"]) == nil)
+        #expect(GooglePlacesService.category(primaryType: "corporate_office", fromTypes: ["corporate_office"], fallback: .attraction) == .attraction,
+                "a search by name still has to show it as something")
+        #expect(GooglePlacesService.recognisedCategory(primaryType: "historical_landmark", types: ["historical_landmark"]) == .attraction)
+    }
+
     @Test func everydayShopsAreLeftOutOfDiscovery() {
         #expect(GooglePlacesService.isEveryday(types: ["auto_parts_store", "market", "car_repair"]))
         #expect(GooglePlacesService.isEveryday(types: ["drugstore", "gift_shop", "discount_store", "food"]))

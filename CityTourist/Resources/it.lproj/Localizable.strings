@@ -505,3 +505,5 @@
 "First up: %@ at %@." = "Per cominciare: %@ alle %@.";
 "Nothing is planned for the first day yet. Open the trip to add a stop." = "Per il primo giorno non c’è ancora nulla in programma. Apri il viaggio per aggiungere una tappa.";
 "Opening hours are each place’s regular hours, and travel times are estimates. Check before you set off." = "Gli orari di apertura sono quelli abituali di ogni luogo e i tempi di spostamento sono stime. Controlla prima di partire.";
+"That’s everything we found." = "È tutto quello che abbiamo trovato.";
+"Couldn’t load more places." = "Impossibile caricare altri luoghi.";

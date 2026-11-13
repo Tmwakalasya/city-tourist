@@ -505,3 +505,5 @@
 "First up: %@ at %@." = "最初は%@（%@）です。";
 "Nothing is planned for the first day yet. Open the trip to add a stop." = "初日の予定はまだありません。旅行を開いて立ち寄り先を追加してください。";
 "Opening hours are each place’s regular hours, and travel times are estimates. Check before you set off." = "営業時間は各場所の通常の営業時間で、移動時間は目安です。出発前にご確認ください。";
+"That’s everything we found." = "見つかったのは以上です。";
+"Couldn’t load more places." = "ほかの場所を読み込めませんでした。";

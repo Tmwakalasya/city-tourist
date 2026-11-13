@@ -73,7 +73,10 @@ struct GooglePlacesService {
     // MARK: Nearby search
 
     /// One category's worth of places around a city centre.
-    func nearby(city: City, category: PlaceCategory, radiusMeters: Double = 12_000,
+    /// How far from a city's centre discovery looks.
+    static let discoveryRadiusMeters: Double = 12_000
+
+    func nearby(city: City, category: PlaceCategory, radiusMeters: Double = GooglePlacesService.discoveryRadiusMeters,
                 prepaid: Bool = false) async throws -> [Place] {
         var request = URLRequest(url: URL(string: "https://places.googleapis.com/v1/places:searchNearby")!)
         request.httpMethod = "POST"
@@ -158,8 +161,11 @@ struct GooglePlacesService {
     /// builder and the concierge search on a traveller's behalf, and a
     /// supermarket's bakery isn't the lunch they meant. Someone typing a name
     /// into place search gets whatever they asked for.
+    ///
+    /// `only` keeps the places Google's types put in that category, for
+    /// adding to the category's own list.
     func searchPlaces(query: String, city: City, pageToken: String? = nil,
-                      forVisitors: Bool = false) async throws
+                      forVisitors: Bool = false, only category: PlaceCategory? = nil) async throws
         -> (places: [Place], nextPageToken: String?) {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2 else { return ([], nil) }
@@ -191,6 +197,9 @@ struct GooglePlacesService {
         var seen = Set<String>()
         let places = (decoded.places ?? []).compactMap { found -> Place? in
             if forVisitors && Self.isEveryday(types: found.types ?? []) { return nil }
+            if let category, Self.recognisedCategory(primaryType: found.primaryType, types: found.types ?? []) != category {
+                return nil
+            }
             return found.toPlace(cityID: city.id, fallbackCategory: .attraction)
         }.filter { place in
             let location = CLLocation(latitude: place.coordinate.latitude, longitude: place.coordinate.longitude)
@@ -443,6 +452,13 @@ struct GooglePlacesService {
     /// zoo or a market is something to do even when it's also a tourist
     /// attraction.
     static func category(primaryType: String? = nil, fromTypes types: [String], fallback: PlaceCategory) -> PlaceCategory {
+        recognisedCategory(primaryType: primaryType, types: types) ?? (fallback == .relaxation ? .activity : fallback)
+    }
+
+    /// The category Google's types point to, or nil when none of them says.
+    /// A search has to guess a category for an office or a town hall so it
+    /// can still be shown; a category's own list must not take the guess.
+    static func recognisedCategory(primaryType: String?, types: [String]) -> PlaceCategory? {
         if isWellness(types: types) { return .relaxation }
         if let primaryType, let category = category(primaryType: primaryType) { return category }
         let set = Set(types)
@@ -452,7 +468,7 @@ struct GooglePlacesService {
         if !set.isDisjoint(with: activityTypes) { return .activity }
         if !set.isDisjoint(with: natureTypes) { return .nature }
         if !set.isDisjoint(with: attractionTypes) { return .attraction }
-        return fallback == .relaxation ? .activity : fallback
+        return nil
     }
 
     /// What a category's request asks Google to leave out. A request returns

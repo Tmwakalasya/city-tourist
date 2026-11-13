@@ -15,10 +15,15 @@ struct ExploreView: View {
 
     private var city: City { store.browsingCity }
 
+    /// Discovery's places by rating, then any loaded on reaching the end, in
+    /// the order they arrived: adding to the list never moves what's above.
     private var results: [Place] {
-        catalog.places(in: store.browsingCityID)
-            .filter { category == nil || $0.category == category }
+        let later = catalog.morePlaces(in: store.browsingCityID)
+        let laterIDs = Set(later.map(\.id))
+        return catalog.places(in: store.browsingCityID)
+            .filter { !laterIDs.contains($0.id) && (category == nil || $0.category == category) }
             .sorted { $0.rating > $1.rating }
+            + later.filter { category == nil || $0.category == category }
     }
 
     private var cityEvents: [Place] {
@@ -65,6 +70,7 @@ struct ExploreView: View {
                             }
                             .buttonStyle(.plain)
                         }
+                        if let category { moreFooter(for: category) }
                     }
                 }
                 .padding(.horizontal, Metric.gutter)
@@ -211,6 +217,43 @@ struct ExploreView: View {
         }
         .padding(.top, 8)
         .background(.bar)
+    }
+
+    /// The end of a category's list. Scrolling to it loads the next page; it
+    /// isn't shown under "All", which already has every category's places.
+    @ViewBuilder
+    private func moreFooter(for category: PlaceCategory) -> some View {
+        if catalog.isLoadingMore(of: category, in: city) {
+            HStack(spacing: 10) {
+                ProgressView()
+                Text("Finding more places…").metaStyle()
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+        } else if catalog.failedToLoadMore(of: category, in: city) {
+            VStack(spacing: 8) {
+                Text("Couldn’t load more places.").metaStyle()
+                Button("Try again") {
+                    Task { await catalog.loadMore(of: category, in: city) }
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Palette.ink)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+        } else if catalog.hasMore(of: category, in: city) {
+            // Reaching this is what asks for the next page.
+            Color.clear
+                .frame(height: 1)
+                .onAppear {
+                    Task { await catalog.loadMore(of: category, in: city) }
+                }
+        } else if !catalog.morePlaces(in: city.id, category: category).isEmpty {
+            Text("That’s everything we found.")
+                .metaStyle()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+        }
     }
 
     private var pillSubtitle: String {
