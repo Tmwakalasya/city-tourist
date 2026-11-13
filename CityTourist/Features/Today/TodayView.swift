@@ -76,8 +76,8 @@ struct TodayView: View {
             location.refresh()
             guard let trip, trip.days.indices.contains(dayIndex) else { return }
             await catalog.resolve(trip.days[dayIndex].stops.map(\.placeID), cityID: trip.cityID)
-            // The city's places, for filling free time. Fetched once a day.
-            await catalog.load(city: CityDirectory.city(id: trip.cityID))
+            // Sights and food nearby, for filling free time. Fetched once a day.
+            await catalog.load(city: CityDirectory.city(id: trip.cityID), categories: PlaceCatalog.firstCategories)
             await weather.load(trip: trip, city: CityDirectory.city(id: trip.cityID))
         }
     }

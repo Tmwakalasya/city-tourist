@@ -128,12 +128,13 @@ struct GooglePlacesService {
         }
     }
 
-    /// All six categories at once, deduped — one city's full catalogue.
-    /// The six are taken from the budget together: a catalogue that would
-    /// run out halfway isn't started, rather than paying for half and
-    /// throwing it away.
-    func catalogue(for city: City) async throws -> [Place] {
-        let categories = PlaceCategory.allCases
+    /// Several categories at once, deduped: all of them is one city's full
+    /// catalogue. Each is a billed search, so callers ask only for what
+    /// they're about to show. They're taken from the budget together: a
+    /// catalogue that would run out halfway isn't started, rather than
+    /// paying for half and throwing it away.
+    func catalogue(for city: City, categories: [PlaceCategory] = PlaceCategory.allCases) async throws -> [Place] {
+        guard !categories.isEmpty else { return [] }
         guard budget.spend(categories.count) else { throw ServiceError.rateLimited }
         return try await withThrowingTaskGroup(of: [Place].self) { group in
             for category in categories {

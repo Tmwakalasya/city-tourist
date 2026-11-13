@@ -124,3 +124,90 @@ extension PlacesAPITests {
         #expect(!catalog.hasMore(of: .food, in: lisbon))
     }
 }
+
+/// Every category is a billed search, and seven on every launch was two
+/// thirds of the Google bill.
+@MainActor
+extension PlacesAPITests {
+    /// The categories asked for so far, by the first type each request names.
+    private var nearbySearches: [String] {
+        StubURLProtocol.recorded
+            .filter { $0.url!.absoluteString.contains("searchNearby") }
+            .compactMap { request in
+                let body = request.stubBody
+                return ((body?["includedTypes"] ?? body?["includedPrimaryTypes"]) as? [String])?.first
+            }
+    }
+
+    /// Answers each category's search with one place of its own.
+    private func stubOnePlacePerCategory() {
+        StubURLProtocol.handler = { request in
+            let body = request.stubBody
+            let type = ((body?["includedTypes"] ?? body?["includedPrimaryTypes"]) as? [String])?.first ?? "none"
+            let json = """
+            { "places": [ { "id": "a-\(type)", "displayName": { "text": "\(type)" }, "rating": 4.5,
+                "location": { "latitude": 38.71, "longitude": -9.14 }, "primaryType": "\(type)", "types": ["\(type)"] } ] }
+            """
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(json.utf8))
+        }
+    }
+
+    @Test func aCityOpensWithTwoSearchesAndAsksForTheRestOnlyWhenWanted() async throws {
+        StubURLProtocol.reset()
+        stubOnePlacePerCategory()
+        let city = SampleData.cities[0]
+        let catalog = PlaceCatalog(makeService: { GooglePlacesService(apiKey: "test-key", session: StubURLProtocol.makeSession()) })
+
+        await catalog.load(city: city, categories: PlaceCatalog.firstCategories)
+        #expect(Set(nearbySearches) == ["tourist_attraction", "restaurant"])
+        #expect(catalog.state == .loaded)
+        #expect(catalog.unloadedCategories(in: city).count == 5)
+        #expect(!catalog.hasMore(of: .museum, in: city), "a category not opened yet has no next page")
+        let opening = catalog.places(in: city.id)
+
+        // Opening a tab asks for that one category, and adds below what's there.
+        await catalog.load(city: city, categories: [.museum])
+        #expect(nearbySearches.count == 3)
+        #expect(Array(catalog.places(in: city.id).prefix(opening.count)) == opening)
+        #expect(catalog.places(in: city.id).last?.id == "a-museum")
+
+        // Asking again costs nothing.
+        await catalog.load(city: city, categories: PlaceCatalog.firstCategories + [.museum])
+        #expect(nearbySearches.count == 3)
+
+        // A plan needs the whole city: only the four not yet asked for.
+        await catalog.load(city: city)
+        #expect(nearbySearches.count == 7)
+        #expect(catalog.unloadedCategories(in: city).isEmpty)
+        #expect(Set(catalog.places(in: city.id).map(\.id)).count == 7)
+    }
+
+    @Test func twoScreensAskingForTheSameCategoryShareOneRequest() async throws {
+        StubURLProtocol.reset()
+        stubOnePlacePerCategory()
+        let city = SampleData.cities[0]
+        let catalog = PlaceCatalog(makeService: { GooglePlacesService(apiKey: "test-key", session: StubURLProtocol.makeSession()) })
+
+        async let explore: () = catalog.load(city: city, categories: PlaceCatalog.firstCategories)
+        async let today: () = catalog.load(city: city, categories: PlaceCatalog.firstCategories)
+        async let plan: () = catalog.load(city: city)
+        _ = await (explore, today, plan)
+
+        #expect(nearbySearches.count == 7, "each category once, however many screens asked")
+        #expect(Set(catalog.places(in: city.id).map(\.id)).count == 7)
+    }
+
+    @Test func aRefreshAsksAgainOnlyForWhatWasOpened() async throws {
+        StubURLProtocol.reset()
+        stubOnePlacePerCategory()
+        let city = SampleData.cities[0]
+        let catalog = PlaceCatalog(makeService: { GooglePlacesService(apiKey: "test-key", session: StubURLProtocol.makeSession()) })
+        await catalog.load(city: city, categories: PlaceCatalog.firstCategories)
+
+        await catalog.load(city: city, force: true, categories: catalog.loadedCategories(in: city))
+
+        #expect(nearbySearches.count == 4)
+        #expect(catalog.places(in: city.id).count == 2)
+        #expect(catalog.loadedCategories(in: city) == PlaceCatalog.firstCategories)
+    }
+}

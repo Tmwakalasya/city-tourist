@@ -87,7 +87,11 @@ struct PlaceSearchView: View {
             }
             .task(id: city.id) {
                 category = initialCategory
-                await catalog.load(city: city)
+                await catalog.load(city: city, categories: PlaceCatalog.firstCategories)
+            }
+            .task(id: category) {
+                guard let category else { return }
+                await catalog.load(city: city, categories: [category])
             }
             .task(id: requestID) { await runSearch() }
         }
