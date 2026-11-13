@@ -221,7 +221,7 @@ struct TripBuilderView: View {
             // Extra searches only help a draft that reads the request.
             if catalog.isLiveDataAvailable {
                 for term in TripDraftService.searchTerms(for: text) {
-                    if let page = try? await catalog.searchPlaces(query: term, city: city) {
+                    if let page = try? await catalog.searchPlaces(query: term, city: city, forVisitors: true) {
                         batches.append(page.places)
                     }
                 }

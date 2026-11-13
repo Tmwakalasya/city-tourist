@@ -55,6 +55,8 @@ struct GooglePlacesService {
         "userRatingCount",
         "priceLevel",
         "types",
+        // What the place mainly is. Same billing tier as `types`.
+        "primaryType",
         "primaryTypeDisplayName",
         "editorialSummary",
         "photos",
@@ -95,6 +97,12 @@ struct GooglePlacesService {
         ]
         let excluded = Self.excludedTypes(for: category)
         if !excluded.isEmpty { body["excludedTypes"] = excluded }
+        // Half the places with a bar are restaurants, which are filed under
+        // food. Asking for what a place mainly is keeps all twenty for nightlife.
+        if category == .nightlife {
+            body["includedTypes"] = nil
+            body["includedPrimaryTypes"] = Self.nightlifePrimaryTypes
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await send(request, prepaid: prepaid)
@@ -112,6 +120,7 @@ struct GooglePlacesService {
         return (decoded.places ?? []).compactMap { place in
             // Nearby can return broad or incomplete matches. Wellness requires positive type evidence.
             if category == .relaxation && !Self.isWellness(types: place.types ?? []) { return nil }
+            if Self.isEveryday(types: place.types ?? []) { return nil }
             return place.toPlace(cityID: city.id, fallbackCategory: category)
         }
     }
@@ -144,7 +153,13 @@ struct GooglePlacesService {
     /// within the advertised 50 km area before assigning them to this city.
     static let placeSearchRadiusMeters: Double = 50_000
 
-    func searchPlaces(query: String, city: City, pageToken: String? = nil) async throws
+    ///
+    /// `forVisitors` leaves out everyday places, as discovery does. The trip
+    /// builder and the concierge search on a traveller's behalf, and a
+    /// supermarket's bakery isn't the lunch they meant. Someone typing a name
+    /// into place search gets whatever they asked for.
+    func searchPlaces(query: String, city: City, pageToken: String? = nil,
+                      forVisitors: Bool = false) async throws
         -> (places: [Place], nextPageToken: String?) {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2 else { return ([], nil) }
@@ -174,8 +189,9 @@ struct GooglePlacesService {
         let decoded = try JSONDecoder().decode(NearbyResponse.self, from: data)
         let centre = CLLocation(latitude: city.coordinate.latitude, longitude: city.coordinate.longitude)
         var seen = Set<String>()
-        let places = (decoded.places ?? []).compactMap {
-            $0.toPlace(cityID: city.id, fallbackCategory: .attraction)
+        let places = (decoded.places ?? []).compactMap { found -> Place? in
+            if forVisitors && Self.isEveryday(types: found.types ?? []) { return nil }
+            return found.toPlace(cityID: city.id, fallbackCategory: .attraction)
         }.filter { place in
             let location = CLLocation(latitude: place.coordinate.latitude, longitude: place.coordinate.longitude)
             return centre.distance(from: location) <= Self.placeSearchRadiusMeters
@@ -348,7 +364,7 @@ struct GooglePlacesService {
         case .food:       ["restaurant", "cafe", "bakery"]
         case .museum:     ["museum", "art_gallery"]
         case .nature:     ["park", "garden", "national_park"]
-        case .activity:   ["market", "shopping_mall", "amusement_park", "zoo"]
+        case .activity:   activityTypes
         case .nightlife:  ["bar", "night_club"]
         case .relaxation: ["spa", "sauna", "wellness_center", "massage_spa", "yoga_studio"]
         }
@@ -362,45 +378,97 @@ struct GooglePlacesService {
             && set.isDisjoint(with: wellnessLookalikes)
     }
 
-    static let wellnessLookalikes: Set<String> = [
+    static let wellnessLookalikes: Set<String> = lodgingTypes.union([
         "hair_salon", "hair_care", "beauty_salon", "nail_salon", "barber_shop",
         "beautician", "makeup_artist", "tanning_studio",
-        "gym", "fitness_center",
+        "gym", "fitness_center"
+    ])
+
+    private static let lodgingTypes: Set<String> = [
         "lodging", "hotel", "resort_hotel", "motel", "inn", "guest_house", "hostel", "bed_and_breakfast"
     ]
 
     private static let nightlifeTypes = ["night_club", "bar", "pub", "wine_bar"]
+    static let nightlifePrimaryTypes = nightlifeTypes + ["cocktail_bar", "lounge_bar", "sports_bar", "brewpub", "brewery", "bar_and_grill"]
     private static let museumTypes = ["museum", "art_gallery", "performing_arts_theater"]
     private static let foodTypes = ["restaurant", "cafe", "bakery", "meal_takeaway"]
-    private static let activityTypes = ["market", "shopping_mall", "amusement_park", "zoo"]
+    private static let activityTypes = [
+        "market", "shopping_mall", "amusement_park", "zoo",
+        "aquarium", "amusement_center", "bowling_alley", "water_park"
+    ]
     private static let natureTypes = ["park", "garden", "national_park", "hiking_area", "beach"]
+    private static let attractionTypes = ["tourist_attraction", "historical_landmark", "monument", "church", "place_of_worship"]
 
-    /// A place has one category, decided in this order. A zoo or a market is
-    /// something to do even when Google also calls it a tourist attraction.
-    static func category(fromTypes types: [String], fallback: PlaceCategory) -> PlaceCategory {
-        let set = Set(types)
+    /// Places people live beside rather than travel for. In a small city the
+    /// most popular "market" is a dollar store and the most popular "bakery"
+    /// is inside a supermarket, so discovery leaves these out. A search by
+    /// name still finds them.
+    static let everydayTypes: Set<String> = [
+        "supermarket", "grocery_store", "warehouse_store", "discount_store", "convenience_store",
+        "drugstore", "pharmacy", "gas_station", "hardware_store", "home_improvement_store",
+        "auto_parts_store", "car_repair", "car_dealer", "car_wash",
+        "hospital", "doctor", "dentist", "real_estate_agency",
+        "hair_salon", "hair_care", "beauty_salon", "nail_salon", "barber_shop",
+        "beautician", "makeup_artist", "tanning_studio"
+    ]
+
+    static func isEveryday(types: [String]) -> Bool {
+        !everydayTypes.isDisjoint(with: types)
+    }
+
+    /// Somewhere to eat, going by what Google says the place mainly is.
+    private static func isEatery(_ primaryType: String) -> Bool {
+        primaryType == "restaurant" || primaryType.hasSuffix("_restaurant") || [
+            "cafe", "bakery", "coffee_shop", "diner", "steak_house", "food_court", "cafeteria", "deli",
+            "sandwich_shop", "ice_cream_shop", "dessert_shop", "donut_shop", "bagel_shop", "juice_shop",
+            "tea_house", "meal_takeaway", "confectionery"
+        ].contains(primaryType)
+    }
+
+    /// The category of a place from what it mainly is, or nil when that says
+    /// nothing we recognise.
+    private static func category(primaryType: String) -> PlaceCategory? {
+        if isEatery(primaryType) { return .food }
+        if nightlifePrimaryTypes.contains(primaryType) { return .nightlife }
+        if (museumTypes + ["art_museum", "history_museum"]).contains(primaryType) { return .museum }
+        if (activityTypes + ["video_arcade", "miniature_golf_course", "indoor_playground", "flea_market"]).contains(primaryType) { return .activity }
+        if (natureTypes + ["nature_preserve", "botanical_garden", "state_park"]).contains(primaryType) { return .nature }
+        if attractionTypes.contains(primaryType) { return .attraction }
+        return nil
+    }
+
+    /// A place has one category. What Google says it mainly is decides: a
+    /// restaurant with a bar is somewhere to eat, and one that hangs art is
+    /// not a museum. Without that, its other types decide in this order; a
+    /// zoo or a market is something to do even when it's also a tourist
+    /// attraction.
+    static func category(primaryType: String? = nil, fromTypes types: [String], fallback: PlaceCategory) -> PlaceCategory {
         if isWellness(types: types) { return .relaxation }
+        if let primaryType, let category = category(primaryType: primaryType) { return category }
+        let set = Set(types)
         if !set.isDisjoint(with: nightlifeTypes) { return .nightlife }
         if !set.isDisjoint(with: museumTypes) { return .museum }
-        if !set.isDisjoint(with: foodTypes + ["food"]) { return .food }
+        if !set.isDisjoint(with: foodTypes) { return .food }
         if !set.isDisjoint(with: activityTypes) { return .activity }
         if !set.isDisjoint(with: natureTypes) { return .nature }
-        if !set.isDisjoint(with: ["tourist_attraction", "historical_landmark", "monument", "church", "place_of_worship"]) { return .attraction }
+        if !set.isDisjoint(with: attractionTypes) { return .attraction }
         return fallback == .relaxation ? .activity : fallback
     }
 
     /// What a category's request asks Google to leave out. A request returns
-    /// twenty places at most, so each one that `category(fromTypes:)` would
-    /// file under another category, or that isn't wellness at all, is a place
-    /// this category goes without. Miami's landmarks came back as eight.
+    /// twenty places at most, so each one that would be filed under another
+    /// category, or dropped as everyday or as not wellness, is a place this
+    /// category goes without. Miami's landmarks came back as eight.
     static func excludedTypes(for category: PlaceCategory) -> [String] {
-        switch category {
+        let elsewhere: [String] = switch category {
         case .attraction: nightlifeTypes + museumTypes + foodTypes + activityTypes + natureTypes
         case .nature:     nightlifeTypes + museumTypes + foodTypes + activityTypes
         case .activity:   nightlifeTypes + museumTypes + foodTypes
-        case .relaxation: wellnessLookalikes.sorted()
-        case .food, .museum, .nightlife: []
+        case .relaxation: Array(wellnessLookalikes)
+        case .nightlife:  Array(lodgingTypes)
+        case .food, .museum: []
         }
+        return Set(elsewhere).union(everydayTypes).sorted()
     }
 
     /// Google doesn't publish visit lengths, so we estimate from the category —
@@ -488,6 +556,7 @@ private struct GooglePlace: Decodable {
     let userRatingCount: Int?
     let priceLevel: String?
     let types: [String]?
+    let primaryType: String?
     let primaryTypeDisplayName: LocalizedText?
     let editorialSummary: LocalizedText?
     let photos: [Photo]?
@@ -501,7 +570,7 @@ private struct GooglePlace: Decodable {
               let longitude = location?.longitude
         else { return nil }
 
-        let category = GooglePlacesService.category(fromTypes: types ?? [], fallback: fallbackCategory)
+        let category = GooglePlacesService.category(primaryType: primaryType, fromTypes: types ?? [], fallback: fallbackCategory)
         let summary = editorialSummary?.text
         let typeLabel = primaryTypeDisplayName?.text ?? category.title
 

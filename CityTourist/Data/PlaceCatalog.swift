@@ -89,7 +89,8 @@ final class PlaceCatalog {
     /// places and itinerary stops. They do not replace the discovery feed.
     /// The calling screen owns its query and loading state so searches on two
     /// screens cannot overwrite each other.
-    func searchPlaces(query: String, city: City, pageToken: String? = nil) async throws
+    func searchPlaces(query: String, city: City, pageToken: String? = nil,
+                      forVisitors: Bool = false) async throws
         -> (places: [Place], nextPageToken: String?) {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2 else { return ([], nil) }
@@ -101,7 +102,8 @@ final class PlaceCatalog {
                     .joined(separator: " ").localizedStandardContains(trimmed)
             }, nil)
         }
-        let result = try await service.searchPlaces(query: trimmed, city: city, pageToken: pageToken)
+        let result = try await service.searchPlaces(query: trimmed, city: city, pageToken: pageToken,
+                                                    forVisitors: forVisitors)
         try Task.checkCancellation()
         CityDirectory.register(city)
         PlaceDirectory.register(result.places)
