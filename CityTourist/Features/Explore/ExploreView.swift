@@ -15,10 +15,25 @@ struct ExploreView: View {
 
     private var city: City { store.browsingCity }
 
+    /// A category's places by rating, then any loaded on reaching the end,
+    /// in the order they arrived. "All" keeps the order its categories came
+    /// in, each by rating. Either way, adding to a list never moves what's above.
     private var results: [Place] {
-        catalog.places(in: store.browsingCityID)
-            .filter { category == nil || $0.category == category }
-            .sorted { $0.rating > $1.rating }
+        let later = catalog.morePlaces(in: store.browsingCityID)
+        let laterIDs = Set(later.map(\.id))
+        let discovered = catalog.places(in: store.browsingCityID).filter { !laterIDs.contains($0.id) }
+        guard let category else { return discovered + later }
+        return discovered.filter { $0.category == category }.sorted { $0.rating > $1.rating }
+            + later.filter { $0.category == category }
+    }
+
+    private var isLoadingThisTab: Bool {
+        catalog.state == .loading || category.map { catalog.isLoading($0, in: city) } == true
+    }
+
+    /// The first screen's categories, and the open tab's when there is one.
+    private var categoriesToOpen: [PlaceCategory] {
+        PlaceCatalog.firstCategories + (category.map { [$0] } ?? [])
     }
 
     private var cityEvents: [Place] {
@@ -38,8 +53,19 @@ struct ExploreView: View {
                         happeningSection
                     }
 
-                    if catalog.state == .loading && results.isEmpty {
+                    if isLoadingThisTab && results.isEmpty {
                         loadingPlaceholder
+                    } else if results.isEmpty, let category, catalog.failedToLoad(category, in: city) {
+                        VStack(spacing: 8) {
+                            Text("Couldn’t load more places.").metaStyle()
+                            Button("Try again") {
+                                Task { await catalog.load(city: city, categories: [category]) }
+                            }
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Palette.ink)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 60)
                     } else if results.isEmpty {
                         EmptyStateView(
                             symbol: "magnifyingglass",
@@ -65,6 +91,7 @@ struct ExploreView: View {
                             }
                             .buttonStyle(.plain)
                         }
+                        if let category { moreFooter(for: category) } else { restFooter }
                     }
                 }
                 .padding(.horizontal, Metric.gutter)
@@ -73,7 +100,10 @@ struct ExploreView: View {
             .background(Palette.canvas)
             .scrollIndicators(.hidden)
             .refreshable {
-                async let placesLoad: () = catalog.load(city: city, force: true)
+                // Refresh what's been opened, not the categories nobody asked for.
+                let opened = catalog.loadedCategories(in: city)
+                async let placesLoad: () = catalog.load(city: city, force: true,
+                                                        categories: opened.isEmpty ? categoriesToOpen : opened)
                 async let eventsLoad: () = eventCatalog.load(city: city, force: true)
                 _ = await (placesLoad, eventsLoad)
             }
@@ -93,9 +123,13 @@ struct ExploreView: View {
                 CityMapView(city: city, places: results)
             }
             .task(id: store.browsingCityID) {
-                async let placesLoad: () = catalog.load(city: city)
+                async let placesLoad: () = catalog.load(city: city, categories: categoriesToOpen)
                 async let eventsLoad: () = eventCatalog.load(city: city)
                 _ = await (placesLoad, eventsLoad)
+            }
+            .task(id: category) {
+                guard let category else { return }
+                await catalog.load(city: city, categories: [category])
             }
         }
     }
@@ -213,6 +247,74 @@ struct ExploreView: View {
         .background(.bar)
     }
 
+    /// The end of "All". It opens with two categories; reaching the end
+    /// brings in the next two, until the city has them all.
+    @ViewBuilder
+    private var restFooter: some View {
+        let rest = catalog.unloadedCategories(in: city)
+        if rest.contains(where: { catalog.isLoading($0, in: city) }) {
+            HStack(spacing: 10) {
+                ProgressView()
+                Text("Finding more places…").metaStyle()
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+        } else if !rest.isEmpty, !rest.contains(where: { catalog.failedToLoad($0, in: city) }) {
+            Color.clear
+                .frame(height: 1)
+                .onAppear {
+                    Task { await catalog.load(city: city, categories: Array(rest.prefix(2))) }
+                }
+        } else if !rest.isEmpty {
+            VStack(spacing: 8) {
+                Text("Couldn’t load more places.").metaStyle()
+                Button("Try again") {
+                    Task { await catalog.load(city: city, categories: Array(rest.prefix(2))) }
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Palette.ink)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+        }
+    }
+
+    /// The end of a category's list. Scrolling to it loads the next page.
+    @ViewBuilder
+    private func moreFooter(for category: PlaceCategory) -> some View {
+        if catalog.isLoadingMore(of: category, in: city) {
+            HStack(spacing: 10) {
+                ProgressView()
+                Text("Finding more places…").metaStyle()
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+        } else if catalog.failedToLoadMore(of: category, in: city) {
+            VStack(spacing: 8) {
+                Text("Couldn’t load more places.").metaStyle()
+                Button("Try again") {
+                    Task { await catalog.loadMore(of: category, in: city) }
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Palette.ink)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+        } else if catalog.hasMore(of: category, in: city) {
+            // Reaching this is what asks for the next page.
+            Color.clear
+                .frame(height: 1)
+                .onAppear {
+                    Task { await catalog.loadMore(of: category, in: city) }
+                }
+        } else if !catalog.morePlaces(in: city.id, category: category).isEmpty {
+            Text("That’s everything we found.")
+                .metaStyle()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+        }
+    }
+
     private var pillSubtitle: String {
         catalog.state == .loading ? "Finding places…" : "Switch city or dates · \(results.count) places"
     }
@@ -245,7 +347,7 @@ struct ExploreView: View {
                         .font(.caption)
                         .fixedSize(horizontal: false, vertical: true)
                     Button("Try again") {
-                        Task { await catalog.load(city: city, force: true) }
+                        Task { await catalog.load(city: city, force: true, categories: categoriesToOpen) }
                     }
                     .font(.caption.weight(.semibold))
                     .underline()

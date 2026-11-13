@@ -65,6 +65,18 @@ final class PlaceCatalog {
     private var cache: [String: [Place]] = [:]
     private var loadedToday: Set<String> = []
 
+    /// Where one category of one city has got to beyond discovery's twenty.
+    private struct More {
+        var places: [Place] = []
+        var nextPageToken: String?
+        var pages = 0
+        var isDone = false
+        var isLoading = false
+        var failed = false
+    }
+    private var more: [String: More] = [:]
+    private static func moreKey(_ category: PlaceCategory, _ cityID: String) -> String { "\(cityID)|\(category.rawValue)" }
+
     private let makeService: () -> GooglePlacesService?
     private let makeEventbriteService: () -> EventbriteService?
     private let makeEventService: () -> TicketmasterService?
@@ -80,9 +92,93 @@ final class PlaceCatalog {
 
     var isLiveDataAvailable: Bool { Secrets.hasGooglePlacesKey }
 
-    /// Places for a city — live results once they're in, sample data until then.
+    /// Places for a city — live results once they're in, sample data until then,
+    /// followed by any that were loaded on reaching the end of a category.
     func places(in cityID: String) -> [Place] {
-        cache[cityID] ?? SampleData.places(in: cityID)
+        (cache[cityID] ?? SampleData.places(in: cityID)) + morePlaces(in: cityID)
+    }
+
+    // MARK: More of a category
+
+    /// A category shows twenty places or so. Reaching the end of the list asks
+    /// for the next page, up to this many pages: each is a billed search, and
+    /// past the third Google has nothing further to give.
+    static let morePagesPerCategory = 3
+    /// A page that mostly repeats what's on screen is followed by one more.
+    private static let fewNewPlaces = 5
+
+    /// The places loaded past discovery, in the order they arrived, so adding
+    /// to a list never reshuffles what's above.
+    func morePlaces(in cityID: String, category: PlaceCategory? = nil) -> [Place] {
+        PlaceCategory.allCases
+            .filter { category == nil || $0 == category }
+            .flatMap { more[Self.moreKey($0, cityID)]?.places ?? [] }
+    }
+
+    func hasMore(of category: PlaceCategory, in city: City) -> Bool {
+        // Only a category that came from Google has further pages to ask for.
+        guard cache[city.id] != nil, isLoaded(category, in: city) else { return false }
+        return more[Self.moreKey(category, city.id)]?.isDone != true
+    }
+
+    func isLoadingMore(of category: PlaceCategory, in city: City) -> Bool {
+        more[Self.moreKey(category, city.id)]?.isLoading == true
+    }
+
+    func failedToLoadMore(of category: PlaceCategory, in city: City) -> Bool {
+        more[Self.moreKey(category, city.id)]?.failed == true
+    }
+
+    /// What to search for to find more of a category.
+    static func moreQuery(for category: PlaceCategory) -> String {
+        switch category {
+        case .attraction: "landmarks and sights"
+        case .food:       "best restaurants"
+        case .museum:     "museums and galleries"
+        case .nature:     "parks and gardens"
+        case .activity:   "things to do"
+        case .nightlife:  "bars and nightlife"
+        case .relaxation: "spas and wellness"
+        }
+    }
+
+    /// Adds the next page of a category to the city's places.
+    func loadMore(of category: PlaceCategory, in city: City) async {
+        let key = Self.moreKey(category, city.id)
+        guard hasMore(of: category, in: city), more[key]?.isLoading != true,
+              let service = makeService() else { return }
+        more[key, default: More()].isLoading = true
+        more[key]?.failed = false
+        defer { more[key]?.isLoading = false }
+
+        let centre = CLLocation(latitude: city.coordinate.latitude, longitude: city.coordinate.longitude)
+        var added = 0
+        // At most two searches for one arrival at the end of the list.
+        for _ in 0..<2 {
+            guard var progress = more[key], !progress.isDone else { return }
+            do {
+                let page = try await service.searchPlaces(query: Self.moreQuery(for: category), city: city,
+                                                          pageToken: progress.nextPageToken, forVisitors: true,
+                                                          only: category)
+                var known = Set(places(in: city.id).map(\.id))
+                let fresh = page.places.filter { place in
+                    let location = CLLocation(latitude: place.coordinate.latitude, longitude: place.coordinate.longitude)
+                    return centre.distance(from: location) <= GooglePlacesService.discoveryRadiusMeters
+                        && known.insert(place.id).inserted
+                }
+                progress.places += fresh
+                progress.pages += 1
+                progress.nextPageToken = page.nextPageToken
+                progress.isDone = page.nextPageToken == nil || progress.pages >= Self.morePagesPerCategory
+                more[key] = progress
+                PlaceDirectory.register(fresh)
+                added += fresh.count
+                if added >= Self.fewNewPlaces { return }
+            } catch {
+                more[key]?.failed = true
+                return
+            }
+        }
     }
 
     /// Search results resolve through the same directory as discovery, saved
@@ -110,33 +206,99 @@ final class PlaceCatalog {
         return result
     }
 
-    /// Fetches today's data for a city. Cheap to call repeatedly: it only hits
-    /// the network once per city per day.
-    func load(city: City, force: Bool = false) async {
-        let stamp = "\(city.id)-\(Self.dayStamp)"
-        guard force || !loadedToday.contains(stamp) else { return }
+    // MARK: Discovery
 
-        guard let service = makeService() else {
+    /// What Explore opens with. Every category is a billed search and most
+    /// visits never leave the first screen, so the others wait until their
+    /// tab is opened, the end of "All" is reached, or a plan needs them.
+    static let firstCategories: [PlaceCategory] = [.attraction, .food]
+
+    private static func key(_ category: PlaceCategory, _ cityID: String) -> String { "\(cityID)|\(category.rawValue)" }
+    private static func stamp(_ category: PlaceCategory, _ cityID: String) -> String { "\(key(category, cityID))|\(dayStamp)" }
+
+    /// Fetches still under way, so two screens asking for the same category
+    /// share one request instead of paying for two.
+    private var inFlight: [String: Task<Void, Never>] = [:]
+    private var failedCategories: Set<String> = []
+
+    func isLoaded(_ category: PlaceCategory, in city: City) -> Bool {
+        loadedToday.contains(Self.stamp(category, city.id))
+    }
+
+    func isLoading(_ category: PlaceCategory, in city: City) -> Bool {
+        inFlight[Self.key(category, city.id)] != nil
+    }
+
+    func failedToLoad(_ category: PlaceCategory, in city: City) -> Bool {
+        failedCategories.contains(Self.key(category, city.id))
+    }
+
+    /// The categories of a city not asked for yet today, in display order.
+    func unloadedCategories(in city: City) -> [PlaceCategory] {
+        guard cache[city.id] != nil else { return [] }
+        return PlaceCategory.allCases.filter { !isLoaded($0, in: city) }
+    }
+
+    func loadedCategories(in city: City) -> [PlaceCategory] {
+        PlaceCategory.allCases.filter { isLoaded($0, in: city) }
+    }
+
+    /// Fetches today's data for a city: every category, or only the ones
+    /// named. Cheap to call repeatedly: a category is asked for once per city
+    /// per day. New places are added after the ones already there, so a list
+    /// on screen doesn't reshuffle; `force` starts the city again with just
+    /// these categories.
+    func load(city: City, force: Bool = false, categories: [PlaceCategory] = PlaceCategory.allCases) async {
+        guard makeService() != nil else {
             source = .sample
             state = .loaded
             return
         }
-
-        state = .loading
-        do {
-            let places = try await service.catalogue(for: city)
-            guard !places.isEmpty else {
-                // A valid key with no results still shouldn't blank the screen.
-                state = .failed("No places came back for \(city.name).")
-                return
+        let wanted = categories.filter { force || !isLoaded($0, in: city) }
+        let mine = wanted.filter { force || inFlight[Self.key($0, city.id)] == nil }
+        let others = wanted.compactMap { inFlight[Self.key($0, city.id)] }
+        if !mine.isEmpty {
+            let task = Task { await fetch(mine, in: city, replacing: force) }
+            for category in mine { inFlight[Self.key(category, city.id)] = task }
+            await task.value
+            for category in mine where inFlight[Self.key(category, city.id)] == task {
+                inFlight[Self.key(category, city.id)] = nil
             }
-            cache[city.id] = places
+        }
+        for task in others { await task.value }
+    }
+
+    private func fetch(_ categories: [PlaceCategory], in city: City, replacing: Bool) async {
+        guard let service = makeService() else { return }
+        if cache[city.id] == nil || replacing { state = .loading }
+        for category in categories { failedCategories.remove(Self.key(category, city.id)) }
+        do {
+            let places = try await service.catalogue(for: city, categories: categories)
+            // Asked again here, not before the request: another category may have arrived meanwhile.
+            if replacing || cache[city.id] == nil {
+                guard !places.isEmpty else {
+                    // A valid key with no results still shouldn't blank the screen.
+                    state = .failed("No places came back for \(city.name).")
+                    return
+                }
+                cache[city.id] = places
+                if replacing {
+                    // A fresh catalogue starts each category's extra pages again.
+                    more = more.filter { !$0.key.hasPrefix("\(city.id)|") }
+                    loadedToday = loadedToday.filter { !$0.hasPrefix("\(city.id)|") }
+                }
+            } else {
+                var known = Set(self.places(in: city.id).map(\.id))
+                cache[city.id, default: []] += places.filter { known.insert($0.id).inserted }
+            }
             PlaceDirectory.register(places)
-            loadedToday.insert(stamp)
+            for category in categories { loadedToday.insert(Self.stamp(category, city.id)) }
             source = .live(fetchedAt: .now)
             state = .loaded
         } catch {
-            state = .failed(error.localizedDescription)
+            for category in categories { failedCategories.insert(Self.key(category, city.id)) }
+            // A city with places on screen keeps them; only an empty one reports the failure.
+            if cache[city.id] == nil || replacing { state = .failed(error.localizedDescription) }
         }
     }
 

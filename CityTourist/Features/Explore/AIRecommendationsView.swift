@@ -60,12 +60,14 @@ struct AIRecommendationsView: View {
             .sheet(item: $placeToAdd) { AddToItinerarySheet(place: $0) }
             .sheet(item: $placeForVibeCheck) { VibeCheckSheet(place: $0) }
             .task(id: city.id) {
-                await catalog.load(city: city)
+                await catalog.load(city: city, categories: PlaceCatalog.firstCategories)
             }
             .task(id: requestID) {
                 guard !submittedQuery.isEmpty else { return }
                 let effectiveQuery = contextualizedQuery(for: submittedQuery)
                 await model.run(query: effectiveQuery, find: { _ in
+                    // The whole city backs up the searches, but only once someone asks.
+                    await catalog.load(city: city)
                     let catalogPlaces = catalog.places(in: city.id)
                     var searched: [Place] = []
                     if catalog.isLiveDataAvailable {

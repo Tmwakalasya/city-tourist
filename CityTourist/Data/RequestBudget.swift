@@ -8,8 +8,9 @@ import Foundation
 /// The day's count is kept in `UserDefaults`, so relaunching doesn't reset it.
 /// Places content can't be kept across launches (Google's terms allow only
 /// ids), so every cold launch looks a city and each stop up again: a city is
-/// six searches, a trip one lookup per stop. The limits leave room for a
-/// long trip opened many times a day. A request that never reaches the
+/// two searches to open and one more for each further category, a trip one
+/// lookup per stop. The limits leave room for a long trip opened many times
+/// a day, and cap what one phone can cost at about $13 a day at list price. A request that never reaches the
 /// server, offline or cancelled, is handed back with `refund`.
 final class RequestBudget: @unchecked Sendable {
 
@@ -19,9 +20,9 @@ final class RequestBudget: @unchecked Sendable {
     }
 
     /// Searches, place details and city lookups.
-    static let googlePlaces = RequestBudget(name: "googlePlaces", limits: Limits(perMinute: 150, perDay: 1500))
+    static let googlePlaces = RequestBudget(name: "googlePlaces", limits: Limits(perMinute: 60, perDay: 250))
     /// Photos are billed one by one, and a scroll through Explore asks for dozens.
-    static let googlePhotos = RequestBudget(name: "googlePhotos", limits: Limits(perMinute: 240, perDay: 3000))
+    static let googlePhotos = RequestBudget(name: "googlePhotos", limits: Limits(perMinute: 120, perDay: 500))
     /// One look-up of a place's short videos. Its search costs 100 of the key's
     /// 10,000 daily units, so each place is kept for a week (`PlaceShorts`).
     static let youtube = RequestBudget(name: "youtube", limits: Limits(perMinute: 10, perDay: 40))
