@@ -153,7 +153,13 @@ struct GooglePlacesService {
     /// within the advertised 50 km area before assigning them to this city.
     static let placeSearchRadiusMeters: Double = 50_000
 
-    func searchPlaces(query: String, city: City, pageToken: String? = nil) async throws
+    ///
+    /// `forVisitors` leaves out everyday places, as discovery does. The trip
+    /// builder and the concierge search on a traveller's behalf, and a
+    /// supermarket's bakery isn't the lunch they meant. Someone typing a name
+    /// into place search gets whatever they asked for.
+    func searchPlaces(query: String, city: City, pageToken: String? = nil,
+                      forVisitors: Bool = false) async throws
         -> (places: [Place], nextPageToken: String?) {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2 else { return ([], nil) }
@@ -183,8 +189,9 @@ struct GooglePlacesService {
         let decoded = try JSONDecoder().decode(NearbyResponse.self, from: data)
         let centre = CLLocation(latitude: city.coordinate.latitude, longitude: city.coordinate.longitude)
         var seen = Set<String>()
-        let places = (decoded.places ?? []).compactMap {
-            $0.toPlace(cityID: city.id, fallbackCategory: .attraction)
+        let places = (decoded.places ?? []).compactMap { found -> Place? in
+            if forVisitors && Self.isEveryday(types: found.types ?? []) { return nil }
+            return found.toPlace(cityID: city.id, fallbackCategory: .attraction)
         }.filter { place in
             let location = CLLocation(latitude: place.coordinate.latitude, longitude: place.coordinate.longitude)
             return centre.distance(from: location) <= Self.placeSearchRadiusMeters

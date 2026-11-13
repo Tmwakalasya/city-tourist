@@ -95,3 +95,32 @@ extension PlacesAPITests {
         #expect((body["excludedTypes"] as? [String])?.contains("hotel") == true)
     }
 }
+
+extension PlacesAPITests {
+    /// The trip builder and the concierge search for the traveller; place
+    /// search is the traveller's own words.
+    @Test func aSearchForVisitorsLeavesOutEverydayPlaces() async throws {
+        let json = """
+        { "places": [
+            { "id": "supermarket", "displayName": { "text": "Super Market Bakery" },
+              "location": { "latitude": 38.71, "longitude": -9.14 },
+              "primaryType": "supermarket", "types": ["supermarket", "bakery", "grocery_store"] },
+            { "id": "bakery", "displayName": { "text": "Corner Bakery" },
+              "location": { "latitude": 38.71, "longitude": -9.14 },
+              "primaryType": "bakery", "types": ["bakery", "cafe"] }
+        ] }
+        """
+        let service = GooglePlacesService(apiKey: "test", session: StubURLProtocol.makeSession())
+
+        StubURLProtocol.reset()
+        StubURLProtocol.respond(json: json)
+        let forVisitors = try await service.searchPlaces(query: "bakery", city: SampleData.cities[0], forVisitors: true)
+        #expect(forVisitors.places.map(\.id) == ["bakery"])
+        #expect(forVisitors.places.first?.category == .food)
+
+        StubURLProtocol.reset()
+        StubURLProtocol.respond(json: json)
+        let typed = try await service.searchPlaces(query: "bakery", city: SampleData.cities[0])
+        #expect(typed.places.map(\.id) == ["supermarket", "bakery"], "a search by name finds anything")
+    }
+}

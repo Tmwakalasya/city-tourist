@@ -72,11 +72,12 @@ struct AIRecommendationsView: View {
                         let queries = AIRecommendationService.searchQueries(for: submittedQuery)
                         var batches = Array(repeating: [Place](), count: queries.count)
                         for (idx, q) in queries.enumerated() {
-                            if let page = try? await catalog.searchPlaces(query: q, city: city) {
+                            if let page = try? await catalog.searchPlaces(query: q, city: city, forVisitors: true) {
                                 batches[idx] = page.places
                             }
                         }
                         searched = AIRecommendationService.interleave(batches)
+                        // Their own words, unfiltered: someone asking for a pharmacy wants one.
                         if searched.isEmpty {
                             searched = try await catalog.searchPlaces(query: submittedQuery, city: city).places
                         }
