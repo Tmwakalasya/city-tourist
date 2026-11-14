@@ -95,9 +95,9 @@ final class PlaceShorts {
 
     /// TikTok has no search API for apps, so its own search opens instead.
     nonisolated static func tikTokURL(for place: Place, in city: City) -> URL {
-        var components = URLComponents(string: "https://www.tiktok.com/search")!
-        components.queryItems = [URLQueryItem(name: "q", value: "\(place.name) \(city.name)")]
-        return components.url!
+        var components = URLComponents(string: "https://www.tiktok.com/search")
+        components?.queryItems = [URLQueryItem(name: "q", value: "\(place.name) \(city.name)")]
+        return components?.url ?? URL(string: "https://www.tiktok.com")!
     }
 
     /// Category-tailored TikTok search angles so users can check the crowd,
@@ -112,43 +112,49 @@ final class PlaceShorts {
                 ("Inside", "inside night out")
             ]
         case .food:
-            return [
-                ("Vibe check", "food review"),
-                ("Must-order", "best dishes menu"),
-                ("Ambiance", "inside patio vibe"),
-                ("Honest review", "worth it review")
+            var angles: [(label: String, suffix: String)] = [
+                ("Vibe check", "food review")
             ]
+            if PopularDishesService.hasItems(for: place.id) {
+                angles.append(("Must-order", "popular items on the menu"))
+            }
+            angles.append(("Honest review", "worth it review"))
+            return angles
         case .museum, .attraction:
-            return [
-                ("Vibe check", "walkthrough"),
-                ("Highlights", "best things to see"),
-                ("Tips", "tips before you go")
+            var angles: [(label: String, suffix: String)] = [
+                ("Vibe check", "walkthrough")
             ]
+            if PlaceTipsService.hasTips(for: place.id) {
+                angles.append(("Tips", "tips before you go"))
+            }
+            return angles
         case .nature, .activity, .relaxation:
-            return [
-                ("Vibe check", "views"),
-                ("Golden hour", "sunset"),
-                ("Tips", "what to know")
+            var angles: [(label: String, suffix: String)] = [
+                ("Vibe check", "views")
             ]
+            if PlaceTipsService.hasTips(for: place.id) {
+                angles.append(("Tips", "what to know"))
+            }
+            return angles
         }
     }
 
     /// Deep-links into TikTok's video search tab with a category/vibe suffix.
     nonisolated static func tikTokVibeURL(for place: Place, in city: City, angleSuffix: String = "") -> URL {
-        var components = URLComponents(string: "https://www.tiktok.com/search/video")!
+        var components = URLComponents(string: "https://www.tiktok.com/search/video")
         let base = "\(place.name) \(city.name)"
         let query = angleSuffix.isEmpty ? base : "\(base) \(angleSuffix)"
-        components.queryItems = [URLQueryItem(name: "q", value: query)]
-        return components.url!
+        components?.queryItems = [URLQueryItem(name: "q", value: query)]
+        return components?.url ?? URL(string: "https://www.tiktok.com")!
     }
 
     /// Mobile YouTube Shorts search URL for a place + vibe angle.
     nonisolated static func youTubeShortsSearchURL(for place: Place, in city: City, angleSuffix: String = "") -> URL {
-        var components = URLComponents(string: "https://m.youtube.com/results")!
+        var components = URLComponents(string: "https://m.youtube.com/results")
         let base = YouTubeService.searchQuery(for: place, in: city)
         let query = angleSuffix.isEmpty ? "\(base) #shorts" : "\(base) \(angleSuffix) #shorts"
-        components.queryItems = [URLQueryItem(name: "search_query", value: query)]
-        return components.url!
+        components?.queryItems = [URLQueryItem(name: "search_query", value: query)]
+        return components?.url ?? URL(string: "https://m.youtube.com")!
     }
 
     /// The place's name as a hashtag page, "#wynwoodwalls".
@@ -169,11 +175,11 @@ final class PlaceShorts {
         angleSuffix: String = "",
         session: URLSession = .shared
     ) async -> [PlaceShort] {
-        var components = URLComponents(string: "https://www.youtube.com/results")!
+        var components = URLComponents(string: "https://www.youtube.com/results")
         let base = YouTubeService.searchQuery(for: place, in: city)
         let query = angleSuffix.isEmpty ? "\(base) #shorts" : "\(base) \(angleSuffix) #shorts"
-        components.queryItems = [URLQueryItem(name: "search_query", value: query)]
-        guard let url = components.url else { return [] }
+        components?.queryItems = [URLQueryItem(name: "search_query", value: query)]
+        guard let url = components?.url else { return [] }
 
         var request = URLRequest(url: url)
         request.timeoutInterval = 12
@@ -206,9 +212,47 @@ final class PlaceShorts {
         var seen = Set<String>()
 
         func walk(_ node: Any) {
-            guard raw.count < 16 else { return }
+            guard raw.count < 24 else { return }
             if let dict = node as? [String: Any] {
-                if let vr = dict["videoRenderer"] as? [String: Any],
+                if let sl = dict["shortsLockupViewModel"] as? [String: Any] {
+                    var vid: String?
+                    if let onTap = sl["onTap"] as? [String: Any],
+                       let cmd = onTap["innertubeCommand"] as? [String: Any] {
+                        if let rwe = cmd["reelWatchEndpoint"] as? [String: Any],
+                           let id = rwe["videoId"] as? String {
+                            vid = id
+                        } else if let meta = cmd["commandMetadata"] as? [String: Any],
+                                  let web = meta["webCommandMetadata"] as? [String: Any],
+                                  let url = web["url"] as? String,
+                                  url.contains("/shorts/") {
+                            vid = url.components(separatedBy: "/shorts/").last?.components(separatedBy: "?").first
+                        }
+                    }
+                    if vid == nil, let entityId = sl["entityId"] as? String, entityId.hasPrefix("shorts-shelf-item-") {
+                        vid = String(entityId.dropFirst("shorts-shelf-item-".count))
+                    }
+                    if let vid, seen.insert(vid).inserted {
+                        let title: String = {
+                            if let overlay = sl["overlayMetadata"] as? [String: Any],
+                               let primary = overlay["primaryText"] as? [String: Any],
+                               let content = primary["content"] as? String,
+                               !content.isEmpty {
+                                return content
+                            }
+                            return sl["accessibilityText"] as? String ?? ""
+                        }()
+                        if !title.isEmpty {
+                            raw.append(PlaceShort(
+                                id: vid,
+                                title: title,
+                                channel: "Shorts",
+                                thumbnailURL: URL(string: "https://i.ytimg.com/vi/\(vid)/hqdefault.jpg"),
+                                views: nil,
+                                seconds: 45
+                            ))
+                        }
+                    }
+                } else if let vr = dict["videoRenderer"] as? [String: Any],
                    let vid = vr["videoId"] as? String,
                    seen.insert(vid).inserted {
                     let title = extractRunsText(vr["title"])
