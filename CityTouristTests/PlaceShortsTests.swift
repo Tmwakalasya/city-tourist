@@ -39,7 +39,7 @@ struct PlaceShortsTests {
         let belem = try #require(SampleData.place(id: "lis-pasteis-belem"))
         let belemItems = PopularDishesService.popularItems(for: belem)
         #expect(belemItems.count == 5)
-        #expect(belemItems.contains { $0.name == "Pastel de Belém" })
+        #expect(belemItems.contains { $0.name == "Pastel de Belém" && $0.imageURL != nil && $0.price != nil })
 
         // 2. Dynamic generation for arbitrary food places
         let ramenPlace = Place(
@@ -60,6 +60,7 @@ struct PlaceShortsTests {
         let ramenDishes = PopularDishesService.popularItems(for: ramenPlace)
         #expect(ramenDishes.count == 5)
         #expect(ramenDishes.first?.name.contains("Ramen") == true)
+        #expect(ramenDishes.first?.imageURL != nil)
 
         let tacoPlace = Place(
             id: "cdmx-taqueria",

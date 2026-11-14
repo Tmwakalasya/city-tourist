@@ -553,9 +553,17 @@ struct VibeCheckSheet: View {
                     .font(.title2)
                     .foregroundStyle(Brand.rausch)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(L10n.text("Must Order"))
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(Palette.ink)
+                    HStack(spacing: 6) {
+                        Text(L10n.text("Must Order"))
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(Palette.ink)
+                        Text(L10n.text("Google Menu Highlights"))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Brand.rausch)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Brand.rausch.opacity(0.1), in: Capsule())
+                    }
                     Text(L10n.text("Top 5 most popular items from the menu"))
                         .font(.footnote)
                         .foregroundStyle(Palette.inkMuted)
@@ -563,28 +571,59 @@ struct VibeCheckSheet: View {
             }
             .padding(.bottom, 2)
 
-            VStack(spacing: 10) {
+            VStack(spacing: 12) {
                 ForEach(Array(dishes.prefix(5).enumerated()), id: \.element.id) { index, dish in
-                    HStack(alignment: .top, spacing: 12) {
-                        Text("\(index + 1)")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(Brand.rausch)
-                            .frame(width: 26, height: 26)
-                            .background(Brand.rausch.opacity(0.12), in: Circle())
+                    HStack(alignment: .center, spacing: 12) {
+                        ZStack(alignment: .topLeading) {
+                            if let url = dish.imageURL {
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image.resizable().scaledToFill()
+                                    case .failure, .empty:
+                                        dishFallback(index: index)
+                                    @unknown default:
+                                        dishFallback(index: index)
+                                    }
+                                }
+                                .frame(width: 80, height: 80)
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            } else {
+                                dishFallback(index: index)
+                                    .frame(width: 80, height: 80)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            }
 
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(dish.name)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(Palette.ink)
+                            Text("#\(index + 1)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(.black.opacity(0.65), in: Capsule())
+                                .padding(5)
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(dish.name)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(Palette.ink)
+                                    .lineLimit(2)
+                                Spacer(minLength: 4)
+                                if let price = dish.price {
+                                    Text(price)
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(Brand.rausch)
+                                }
+                            }
                             Text(dish.note)
                                 .font(.caption)
                                 .foregroundStyle(Palette.inkMuted)
+                                .lineLimit(3)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-
-                        Spacer(minLength: 0)
                     }
-                    .padding(14)
+                    .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay {
@@ -593,6 +632,15 @@ struct VibeCheckSheet: View {
                     }
                 }
             }
+        }
+    }
+
+    private func dishFallback(index: Int) -> some View {
+        ZStack {
+            Palette.elevated
+            Image(systemName: "fork.knife")
+                .font(.title3)
+                .foregroundStyle(Palette.inkFaint)
         }
     }
 
