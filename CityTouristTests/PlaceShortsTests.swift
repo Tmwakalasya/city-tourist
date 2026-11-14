@@ -3,6 +3,7 @@ import Foundation
 @testable import CityTourist
 
 /// Short videos on place pages: matching, durations and the links out.
+@MainActor
 struct PlaceShortsTests {
 
     @Test func youTubeDurationsReadAsSeconds() {
@@ -32,6 +33,198 @@ struct PlaceShortsTests {
         #expect(tikTok?.queryItems?.first?.value == "\(place.name) \(city.name)")
         #expect(PlaceShorts.instagramURL(for: place)?.absoluteString
                 == "https://www.instagram.com/explore/tags/belemtower/")
+    }
+
+    @Test func popularDishesGenerationForFoodVenues() throws {
+        // 1. Curated Restaurants & Cafés
+        let belem = try #require(SampleData.place(id: "lis-pasteis-belem"))
+        let belemItems = PopularDishesService.popularItems(for: belem)
+        #expect(belemItems.count == 5)
+        #expect(belemItems.contains { $0.name == "Pastel de Belém" && $0.imageURL != nil && $0.price != nil })
+        #expect(PopularDishesService.hasItems(for: belem))
+        #expect(PopularDishesService.venueKind(for: belem) == .restaurantCafe)
+
+        let contramar = try #require(SampleData.place(id: "mex-contramar"))
+        let contramarItems = PopularDishesService.popularItems(for: contramar)
+        #expect(contramarItems.count == 5)
+        #expect(contramarItems.contains { $0.name == "Tostadas de Atún Fresco" && $0.imageURL != nil && $0.price != nil })
+        #expect(PopularDishesService.venueKind(for: contramar) == .restaurantCafe)
+
+        // 2. Curated Bars & Nightlife
+        let pensao = try #require(SampleData.place(id: "lis-pensao-amor"))
+        let pensaoItems = PopularDishesService.popularItems(for: pensao)
+        #expect(pensaoItems.count == 5)
+        #expect(pensaoItems.contains { $0.name.contains("Amor") && $0.imageURL != nil && $0.price != nil })
+        #expect(PopularDishesService.hasItems(for: pensao))
+        #expect(PopularDishesService.venueKind(for: pensao) == .barNightlife)
+
+        let pontocho = try #require(SampleData.place(id: "kyo-pontocho"))
+        let pontochoItems = PopularDishesService.popularItems(for: pontocho)
+        #expect(pontochoItems.count == 5)
+        #expect(pontochoItems.contains { $0.name.contains("Yakitori") && $0.imageURL != nil })
+        #expect(PopularDishesService.venueKind(for: pontocho) == .barNightlife)
+
+        // 3. Curated Culinary Hubs
+        let lxfactory = try #require(SampleData.place(id: "lis-lx-factory"))
+        let lxItems = PopularDishesService.popularItems(for: lxfactory)
+        #expect(lxItems.count == 5)
+        #expect(lxItems.contains { $0.name.contains("Landeau") })
+        #expect(PopularDishesService.venueKind(for: lxfactory) == .culinaryHub)
+
+        let gion = try #require(SampleData.place(id: "kyo-gion"))
+        let gionItems = PopularDishesService.popularItems(for: gion)
+        #expect(gionItems.count == 5)
+        #expect(gionItems.contains { $0.name.contains("Matcha") && $0.imageURL != nil })
+        #expect(PopularDishesService.venueKind(for: gion) == .culinaryHub)
+
+        let timeout = try #require(SampleData.place(id: "lis-timeout"))
+        #expect(PopularDishesService.venueKind(for: timeout) == .culinaryHub)
+
+        // 4. Live / Google Places dining venues (e.g. Hygge Kaffe)
+        let hyggeKaffe = Place(
+            id: "lis-hygge-kaffe",
+            name: "Hygge Kaffe",
+            cityID: "lisbon",
+            category: .food,
+            neighborhood: "Saldanha",
+            rating: 4.6,
+            reviewCount: 840,
+            priceLevel: 2,
+            typicalMinutes: 45,
+            blurb: "Nordic specialty coffee & brunch cafe",
+            about: "Danish inspired cozy cafe serving flat whites and cinnamon buns.",
+            coordinate: Coordinate(latitude: 38.7330, longitude: -9.1480),
+            tags: ["Coffee", "Cafe", "Brunch"]
+        )
+        #expect(PopularDishesService.hasItems(for: hyggeKaffe))
+        let hyggeAngles = PlaceShorts.vibeAngles(for: hyggeKaffe)
+        #expect(hyggeAngles.contains { $0.label == "Must-order" })
+        let hyggeItems = PopularDishesService.popularItems(for: hyggeKaffe)
+        #expect(hyggeItems.count == 5)
+        #expect(hyggeItems.contains { $0.name.contains("Cinnamon") && $0.imageURL != nil })
+        #expect(PopularDishesService.venueKind(for: hyggeKaffe) == .restaurantCafe)
+
+        // 5. Vibe angles include Must-order for food, bars, and culinary places
+        let belemAngles = PlaceShorts.vibeAngles(for: belem)
+        #expect(belemAngles.contains { $0.label == "Must-order" })
+
+        let pensaoAngles = PlaceShorts.vibeAngles(for: pensao)
+        #expect(pensaoAngles.contains { $0.label == "Must-order" })
+
+        let gionAngles = PlaceShorts.vibeAngles(for: gion)
+        #expect(gionAngles.contains { $0.label == "Must-order" })
+
+        // 6. Non-menu venues return empty and do not have Must-order
+        let tower = try #require(SampleData.place(id: "lis-belem-tower"))
+        #expect(PopularDishesService.popularItems(for: tower).isEmpty)
+        #expect(!PopularDishesService.hasItems(for: tower))
+        let towerAngles = PlaceShorts.vibeAngles(for: tower)
+        #expect(!towerAngles.contains { $0.label == "Must-order" })
+    }
+
+    @Test func realReviewsForSampleVenues() async throws {
+        let belem = try #require(SampleData.place(id: "lis-pasteis-belem"))
+        let reviews = await PlaceReviewsService.fetchReviews(for: belem)
+        #expect(!reviews.isEmpty)
+        #expect(reviews.allSatisfy { $0.rating >= 4 })
+        #expect(reviews.allSatisfy { !$0.author.isEmpty && !$0.comment.isEmpty })
+    }
+
+    @Test func countryBasedCurrencyResolution() {
+        // Country symbol resolution
+        #expect(PopularDishesService.currencySymbol(for: "Portugal") == "€")
+        #expect(PopularDishesService.currencySymbol(for: "Spain") == "€")
+        #expect(PopularDishesService.currencySymbol(for: "France") == "€")
+        #expect(PopularDishesService.currencySymbol(for: "Italy") == "€")
+        #expect(PopularDishesService.currencySymbol(for: "Germany") == "€")
+        #expect(PopularDishesService.currencySymbol(for: "Japan") == "¥")
+        #expect(PopularDishesService.currencySymbol(for: "Mexico") == "$ MXN")
+        #expect(PopularDishesService.currencySymbol(for: "United Kingdom") == "£")
+        #expect(PopularDishesService.currencySymbol(for: "Canada") == "$ CAD")
+        #expect(PopularDishesService.currencySymbol(for: "Australia") == "$ AUD")
+        #expect(PopularDishesService.currencySymbol(for: "Switzerland") == "CHF")
+        #expect(PopularDishesService.currencySymbol(for: "United States") == "$")
+
+        // Currency resolution for places by country
+        let lisbonPlace = Place(
+            id: "test-lisbon-cafe",
+            name: "Hygge Kaffe",
+            cityID: "lisbon",
+            category: .food,
+            neighborhood: "R. Tomás Ribeiro 95B, Lisboa",
+            rating: 4.6,
+            reviewCount: 500,
+            priceLevel: 2,
+            typicalMinutes: 45,
+            blurb: "Nordic cafe",
+            about: "Danish cafe in Lisbon",
+            coordinate: Coordinate(latitude: 38.7330, longitude: -9.1480),
+            tags: ["Coffee", "Cafe"]
+        )
+        #expect(PopularDishesService.country(for: lisbonPlace) == "Portugal")
+        #expect(PopularDishesService.currency(for: lisbonPlace) == "€")
+        let lisbonItems = PopularDishesService.popularItems(for: lisbonPlace)
+        #expect(lisbonItems.allSatisfy { $0.price?.contains("€") == true })
+
+        let londonPlace = Place(
+            id: "test-london-pub",
+            name: "The Churchill Arms",
+            cityID: "london",
+            category: .nightlife,
+            neighborhood: "Kensington, London, UK",
+            rating: 4.5,
+            reviewCount: 1200,
+            priceLevel: 2,
+            typicalMinutes: 60,
+            blurb: "Historic pub",
+            about: "Famous floral pub serving real ales",
+            coordinate: Coordinate(latitude: 51.5074, longitude: -0.1950),
+            tags: ["Pub", "Beer"]
+        )
+        #expect(PopularDishesService.country(for: londonPlace) == "United Kingdom")
+        #expect(PopularDishesService.currency(for: londonPlace) == "£")
+        let londonItems = PopularDishesService.popularItems(for: londonPlace)
+        #expect(londonItems.allSatisfy { $0.price?.contains("£") == true })
+
+        let tokyoPlace = Place(
+            id: "test-tokyo-ramen",
+            name: "Afuri Ramen",
+            cityID: "tokyo",
+            category: .food,
+            neighborhood: "Ebisu, Tokyo, Japan",
+            rating: 4.7,
+            reviewCount: 2000,
+            priceLevel: 2,
+            typicalMinutes: 40,
+            blurb: "Yuzu ramen shop",
+            about: "Delicate chicken broth with yuzu citrus",
+            coordinate: Coordinate(latitude: 35.6467, longitude: 139.7101),
+            tags: ["Ramen", "Noodles"]
+        )
+        #expect(PopularDishesService.country(for: tokyoPlace) == "Japan")
+        #expect(PopularDishesService.currency(for: tokyoPlace) == "¥")
+        let tokyoItems = PopularDishesService.popularItems(for: tokyoPlace)
+        #expect(tokyoItems.allSatisfy { $0.price?.contains("¥") == true })
+
+        let nyPlace = Place(
+            id: "test-ny-pizza",
+            name: "Joe's Pizza",
+            cityID: "new-york",
+            category: .food,
+            neighborhood: "Greenwich Village, New York, NY, USA",
+            rating: 4.8,
+            reviewCount: 3500,
+            priceLevel: 1,
+            typicalMinutes: 30,
+            blurb: "Classic NY slice joint",
+            about: "Fresh hot plain and pepperoni slices",
+            coordinate: Coordinate(latitude: 40.7306, longitude: -74.0021),
+            tags: ["Pizza", "Italian"]
+        )
+        #expect(PopularDishesService.country(for: nyPlace) == "United States")
+        #expect(PopularDishesService.currency(for: nyPlace) == "$")
+        let nyItems = PopularDishesService.popularItems(for: nyPlace)
+        #expect(nyItems.allSatisfy { $0.price?.contains("$") == true })
     }
 }
 

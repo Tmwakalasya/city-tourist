@@ -84,7 +84,7 @@ struct YouTubePlayer: UIViewRepresentable {
     }
 
     static func origin(bundleID: String) -> URL {
-        URL(string: "https://\(bundleID.lowercased())")!
+        URL(string: "https://\(bundleID.lowercased())") ?? URL(string: "https://com.tmwakalasya.citytourist")!
     }
 
     static func html(videoID: String, origin: URL) -> String {
@@ -95,7 +95,7 @@ struct YouTubePlayer: UIViewRepresentable {
             "playerVars": ["autoplay": 0, "controls": 1, "playsinline": 1,
                            "rel": 0, "origin": origin.absoluteString]
         ]
-        let data = try! JSONSerialization.data(withJSONObject: options, options: [.sortedKeys])
+        let data = (try? JSONSerialization.data(withJSONObject: options, options: [.sortedKeys])) ?? Data("{}".utf8)
         let json = String(decoding: data, as: UTF8.self)
         return """
         <!doctype html><html><head>

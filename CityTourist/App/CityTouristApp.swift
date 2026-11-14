@@ -21,6 +21,20 @@ struct CityTouristApp: App {
     @State private var authentication = AuthenticationStore()
     @State private var avatar = AvatarStore()
 
+    #if targetEnvironment(simulator)
+    private static let _simulatorMetalGuard: Void = {
+        setenv("METAL_DEBUG_ERROR_MODE", "0", 1)
+        setenv("METAL_ERROR_MODE", "0", 1)
+        setenv("METAL_DEVICE_WRAPPER_TYPE", "0", 1)
+    }()
+    #endif
+
+    init() {
+        #if targetEnvironment(simulator)
+        _ = Self._simulatorMetalGuard
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
             if Self.isRunningTests {

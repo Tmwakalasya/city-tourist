@@ -507,3 +507,27 @@
 "Opening hours are each place’s regular hours, and travel times are estimates. Check before you set off." = "営業時間は各場所の通常の営業時間で、移動時間は目安です。出発前にご確認ください。";
 "That’s everything we found." = "見つかったのは以上です。";
 "Couldn’t load more places." = "ほかの場所を読み込めませんでした。";
+
+"Vibe Check" = "雰囲気チェック";
+"Must Order" = "おすすめメニュー";
+"Google Menu Highlights" = "Googleおすすめメニュー";
+"Top 5 most popular items from the menu" = "メニューで最も人気のある上位5品";
+"Top 5 most popular drinks & bites from the menu" = "メニューで最も人気のドリンク＆おつまみ上位5品";
+"Restaurants & Cafés" = "レストラン＆カフェ";
+"Bars & Nightlife" = "バー＆ナイトライフ";
+"Culinary Hubs" = "フード＆グルメスポット";
+"Top 5 most popular items directly from verified Google Menu Highlights & venue menus" = "Googleおすすめメニューと公式メニューから選ばれた人気上位5品";
+"Top 5 most popular drinks & bites directly from verified venue menus" = "公式メニューから厳選された人気ドリンク＆タパス上位5品";
+"Tips & Tricks" = "おすすめのコツ";
+"Must-order" = "おすすめメニュー";
+"Tips" = "ヒント";
+"Honest review" = "リアルな感想";
+"Crowd & DJ" = "客層・DJ";
+"Dress code" = "ドレスコード";
+"Inside" = "店内の様子";
+
+"Honest Reviews" = "リアルな感想";
+"Real feedback from verified visitors" = "実際の訪問者からのリアルな感想";
+"Loading real reviews…" = "実際のレビューを読み込み中…";
+"No written reviews available yet" = "まだ投稿されたレビューはありません";
+"Check out short-form video reviews below." = "下のショート動画レビューをご覧ください。";
