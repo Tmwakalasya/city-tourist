@@ -59,7 +59,7 @@ struct PlaceShortsSection: View {
                         in: RoundedRectangle(cornerRadius: 10, style: .continuous)
                     )
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("TikTok Vibe Check")
+                    Text("Vibe Check")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Palette.ink)
                     Text("Tap an angle to preview \(place.name) in \(city.name)")
@@ -367,6 +367,11 @@ struct VibeCheckSheet: View {
         return angles[angleIndex].suffix
     }
 
+    private var currentAngleLabel: String {
+        guard angles.indices.contains(angleIndex) else { return "" }
+        return angles[angleIndex].label
+    }
+
     private var currentClip: PlaceShort? {
         guard clips.indices.contains(selectedClipIndex) else { return nil }
         return clips[selectedClipIndex]
@@ -380,9 +385,17 @@ struct VibeCheckSheet: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        playerSection
-                        if clips.count > 1 {
-                            clipStrip
+                        if currentAngleLabel == "Must-order" && place.category == .food {
+                            mustOrderView
+                        } else if currentAngleLabel == "Honest review" {
+                            honestReviewsSection
+                        } else if currentAngleLabel == "Tips" {
+                            tipsView
+                        } else {
+                            playerSection
+                            if clips.count > 1 {
+                                clipStrip
+                            }
                         }
                         externalAppLinks
                     }
@@ -398,7 +411,10 @@ struct VibeCheckSheet: View {
                     Button("Done") { dismiss() }
                         .tint(Brand.rausch)
                 }
-                if let clip = currentClip {
+                if let clip = currentClip,
+                   !(currentAngleLabel == "Must-order" && place.category == .food),
+                   currentAngleLabel != "Honest review",
+                   currentAngleLabel != "Tips" {
                     ToolbarItem(placement: .topBarTrailing) {
                         Link(destination: clip.watchURL) {
                             Image(systemName: "arrow.up.right.square")
@@ -528,6 +544,158 @@ struct VibeCheckSheet: View {
         }
     }
 
+    private var mustOrderView: some View {
+        let dishes = PopularDishesService.popularItems(for: place)
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "fork.knife.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(Brand.rausch)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Must Order")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(Palette.ink)
+                    Text("Top 5 most popular items from the menu")
+                        .font(.footnote)
+                        .foregroundStyle(Palette.inkMuted)
+                }
+            }
+            .padding(.bottom, 2)
+
+            VStack(spacing: 10) {
+                ForEach(Array(dishes.prefix(5).enumerated()), id: \.element.id) { index, dish in
+                    HStack(alignment: .top, spacing: 12) {
+                        Text("\(index + 1)")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(Brand.rausch)
+                            .frame(width: 26, height: 26)
+                            .background(Brand.rausch.opacity(0.12), in: Circle())
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(dish.name)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Palette.ink)
+                            Text(dish.note)
+                                .font(.caption)
+                                .foregroundStyle(Palette.inkMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: 0)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Palette.hairline, lineWidth: 1)
+                    }
+                }
+            }
+        }
+    }
+
+    private var honestReviewsSection: some View {
+        let reviews = PlaceReviewsService.reviews(for: place)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "quote.bubble.fill")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Brand.rausch)
+                Text("REVIEWS FOR THIS LOCATION")
+                    .font(.caption2.weight(.bold))
+                    .tracking(0.8)
+                    .foregroundStyle(Palette.inkMuted)
+            }
+
+            VStack(spacing: 10) {
+                ForEach(reviews) { item in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(item.author)
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(Palette.ink)
+                            Spacer()
+                            HStack(spacing: 2) {
+                                ForEach(1...5, id: \.self) { star in
+                                    Image(systemName: star <= item.rating ? "star.fill" : "star")
+                                        .font(.caption2)
+                                        .foregroundStyle(star <= item.rating ? Brand.rausch : Palette.inkFaint)
+                                }
+                            }
+                            Text("· \(item.timeAgo)")
+                                .font(.caption2)
+                                .foregroundStyle(Palette.inkMuted)
+                        }
+
+                        Text(item.comment)
+                            .font(.caption)
+                            .foregroundStyle(Palette.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Palette.hairline, lineWidth: 1)
+                    }
+                }
+            }
+        }
+    }
+
+    private var tipsView: some View {
+        let tips = PlaceTipsService.tips(for: place)
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "lightbulb.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(Brand.rausch)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Tips & Tricks")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(Palette.ink)
+                    Text("Practical advice and secrets from traveller forums")
+                        .font(.footnote)
+                        .foregroundStyle(Palette.inkMuted)
+                }
+            }
+            .padding(.bottom, 2)
+
+            VStack(spacing: 10) {
+                ForEach(tips) { tip in
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: tip.iconName)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Brand.rausch)
+                            .frame(width: 32, height: 32)
+                            .background(Brand.rausch.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(tip.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Palette.ink)
+                            Text(tip.summary)
+                                .font(.caption)
+                                .foregroundStyle(Palette.inkMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: 0)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Palette.hairline, lineWidth: 1)
+                    }
+                }
+            }
+        }
+    }
+
     private var clipStrip: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("MORE CLIPS FOR THIS VIBE")
@@ -576,7 +744,7 @@ struct VibeCheckSheet: View {
 
     private var externalAppLinks: some View {
         HStack(spacing: 10) {
-            Link(destination: PlaceShorts.tikTokVibeURL(for: place, in: city, angleSuffix: currentSuffix)) {
+            Link(destination: PlaceShorts.tikTokURL(for: place, in: city)) {
                 HStack(spacing: 6) {
                     Text("Open in TikTok")
                     Image(systemName: "arrow.up.right")
@@ -620,6 +788,13 @@ struct VibeCheckSheet: View {
     }
 
     private func loadClips() async {
+        if (currentAngleLabel == "Must-order" && place.category == .food)
+            || currentAngleLabel == "Honest review"
+            || currentAngleLabel == "Tips" {
+            isLoading = false
+            clips = []
+            return
+        }
         isLoading = true
         let found = await PlaceShorts.fetchLiveVibeShorts(
             for: place,

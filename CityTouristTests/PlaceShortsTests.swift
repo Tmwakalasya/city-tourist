@@ -29,7 +29,7 @@ struct PlaceShortsTests {
 
         let tikTok = URLComponents(url: PlaceShorts.tikTokURL(for: place, in: city), resolvingAgainstBaseURL: false)
         #expect(tikTok?.host == "www.tiktok.com")
-        #expect(tikTok?.queryItems?.first?.value == "\(place.name) \(city.name)")
+        #expect(tikTok?.path == "/tag/belemtower")
         #expect(PlaceShorts.instagramURL(for: place)?.absoluteString
                 == "https://www.instagram.com/explore/tags/belemtower/")
     }

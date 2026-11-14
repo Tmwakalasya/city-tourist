@@ -19,7 +19,7 @@ enum PlaceDirectory {
     fileprivate final class Storage {
         var byID: [String: Place]
         init(_ places: [Place]) {
-            byID = Dictionary(uniqueKeysWithValues: places.map { ($0.id, $0) })
+            byID = Dictionary(places.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         }
     }
 
@@ -383,7 +383,8 @@ final class PlaceCatalog {
 @MainActor
 enum CityDirectory {
     private static var byID: [String: City] = Dictionary(
-        uniqueKeysWithValues: SampleData.cities.map { ($0.id, $0) }
+        SampleData.cities.map { ($0.id, $0) },
+        uniquingKeysWith: { first, _ in first }
     )
 
     /// Falls back to the first sample city so callers never have to unwrap.
