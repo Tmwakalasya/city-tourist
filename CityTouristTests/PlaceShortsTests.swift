@@ -35,35 +35,49 @@ struct PlaceShortsTests {
     }
 
     @Test func popularDishesGenerationForFoodVenues() throws {
-        // 1. Curated restaurant venues
+        // 1. Curated Restaurants & Cafés
         let belem = try #require(SampleData.place(id: "lis-pasteis-belem"))
         let belemItems = PopularDishesService.popularItems(for: belem)
         #expect(belemItems.count == 5)
         #expect(belemItems.contains { $0.name == "Pastel de Belém" && $0.imageURL != nil && $0.price != nil })
         #expect(PopularDishesService.hasItems(for: belem))
+        #expect(PopularDishesService.venueKind(for: belem) == .restaurantCafe)
 
         let contramar = try #require(SampleData.place(id: "mex-contramar"))
         let contramarItems = PopularDishesService.popularItems(for: contramar)
         #expect(contramarItems.count == 5)
         #expect(contramarItems.contains { $0.name == "Tostadas de Atún Fresco" && $0.imageURL != nil && $0.price != nil })
+        #expect(PopularDishesService.venueKind(for: contramar) == .restaurantCafe)
 
-        // 2. Curated bar / nightlife venues
+        // 2. Curated Bars & Nightlife
         let pensao = try #require(SampleData.place(id: "lis-pensao-amor"))
         let pensaoItems = PopularDishesService.popularItems(for: pensao)
         #expect(pensaoItems.count == 5)
         #expect(pensaoItems.contains { $0.name.contains("Amor") && $0.imageURL != nil && $0.price != nil })
         #expect(PopularDishesService.hasItems(for: pensao))
+        #expect(PopularDishesService.venueKind(for: pensao) == .barNightlife)
 
         let pontocho = try #require(SampleData.place(id: "kyo-pontocho"))
         let pontochoItems = PopularDishesService.popularItems(for: pontocho)
         #expect(pontochoItems.count == 5)
         #expect(pontochoItems.contains { $0.name.contains("Yakitori") && $0.imageURL != nil })
+        #expect(PopularDishesService.venueKind(for: pontocho) == .barNightlife)
 
-        // 3. Curated culinary strip venues
+        // 3. Curated Culinary Hubs
         let lxfactory = try #require(SampleData.place(id: "lis-lx-factory"))
         let lxItems = PopularDishesService.popularItems(for: lxfactory)
         #expect(lxItems.count == 5)
         #expect(lxItems.contains { $0.name.contains("Landeau") })
+        #expect(PopularDishesService.venueKind(for: lxfactory) == .culinaryHub)
+
+        let gion = try #require(SampleData.place(id: "kyo-gion"))
+        let gionItems = PopularDishesService.popularItems(for: gion)
+        #expect(gionItems.count == 5)
+        #expect(gionItems.contains { $0.name.contains("Matcha") && $0.imageURL != nil })
+        #expect(PopularDishesService.venueKind(for: gion) == .culinaryHub)
+
+        let timeout = try #require(SampleData.place(id: "lis-timeout"))
+        #expect(PopularDishesService.venueKind(for: timeout) == .culinaryHub)
 
         // 4. Vibe angles include Must-order for food, bars, and culinary places
         let belemAngles = PlaceShorts.vibeAngles(for: belem)
@@ -71,6 +85,9 @@ struct PlaceShortsTests {
 
         let pensaoAngles = PlaceShorts.vibeAngles(for: pensao)
         #expect(pensaoAngles.contains { $0.label == "Must-order" })
+
+        let gionAngles = PlaceShorts.vibeAngles(for: gion)
+        #expect(gionAngles.contains { $0.label == "Must-order" })
 
         // 5. Non-menu venues return empty and do not have Must-order
         let tower = try #require(SampleData.place(id: "lis-belem-tower"))

@@ -545,15 +545,12 @@ struct VibeCheckSheet: View {
         }
     }
 
-    private var isBarOrNightlife: Bool {
-        place.category == .nightlife
-    }
-
     private var mustOrderView: some View {
         let dishes = PopularDishesService.popularItems(for: place)
+        let kind = PopularDishesService.venueKind(for: place)
         return VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
-                Image(systemName: isBarOrNightlife ? "wineglass.fill" : "fork.knife.circle.fill")
+                Image(systemName: kind.iconName)
                     .font(.title2)
                     .foregroundStyle(Brand.rausch)
                 VStack(alignment: .leading, spacing: 2) {
@@ -561,16 +558,14 @@ struct VibeCheckSheet: View {
                         Text(L10n.text("Must Order"))
                             .font(.title3.weight(.bold))
                             .foregroundStyle(Palette.ink)
-                        Text(L10n.text("Google Menu Highlights"))
+                        Text(kind.headerBadge)
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(Brand.rausch)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(Brand.rausch.opacity(0.1), in: Capsule())
                     }
-                    Text(isBarOrNightlife
-                         ? L10n.text("Top 5 most popular drinks & bites from the menu")
-                         : L10n.text("Top 5 most popular items from the menu"))
+                    Text(kind.subtitle)
                         .font(.footnote)
                         .foregroundStyle(Palette.inkMuted)
                 }
@@ -642,9 +637,10 @@ struct VibeCheckSheet: View {
     }
 
     private func dishFallback(index: Int) -> some View {
-        ZStack {
+        let kind = PopularDishesService.venueKind(for: place)
+        return ZStack {
             Palette.elevated
-            Image(systemName: isBarOrNightlife ? "wineglass" : "fork.knife")
+            Image(systemName: kind == .barNightlife ? "wineglass" : "fork.knife")
                 .font(.title3)
                 .foregroundStyle(Palette.inkFaint)
         }

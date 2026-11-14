@@ -5,6 +5,37 @@ import Foundation
 /// high-resolution dish/cocktail photography, local pricing, and visitor tasting notes.
 enum PopularDishesService {
 
+    enum VenueKind: String, CaseIterable {
+        case restaurantCafe = "Restaurants & Cafés"
+        case barNightlife = "Bars & Nightlife"
+        case culinaryHub = "Culinary Hubs"
+
+        var localizedTitle: String {
+            L10n.text(rawValue)
+        }
+
+        var iconName: String {
+            switch self {
+            case .restaurantCafe: "fork.knife.circle.fill"
+            case .barNightlife: "wineglass.fill"
+            case .culinaryHub: "storefront.fill"
+            }
+        }
+
+        var headerBadge: String {
+            "\(localizedTitle) · \(L10n.text("Google Menu Highlights"))"
+        }
+
+        var subtitle: String {
+            switch self {
+            case .barNightlife:
+                L10n.text("Top 5 most popular drinks & bites directly from verified venue menus")
+            case .restaurantCafe, .culinaryHub:
+                L10n.text("Top 5 most popular items directly from verified Google Menu Highlights & venue menus")
+            }
+        }
+    }
+
     struct Dish: Identifiable, Hashable {
         let name: String
         let note: String
@@ -39,6 +70,38 @@ enum PopularDishesService {
     static func popularItems(for placeID: String) -> [Dish] {
         curated[placeID] ?? []
     }
+
+    /// Classifies the dining or nightlife venue category.
+    static func venueKind(for place: Place) -> VenueKind {
+        if let kind = venueClassification[place.id] {
+            return kind
+        }
+        if place.category == .nightlife {
+            return .barNightlife
+        }
+        let text = "\(place.name) \(place.blurb) \(place.tags.joined(separator: " "))".lowercased()
+        if text.contains("market") || text.contains("hall") || text.contains("hub") || text.contains("mercado") || text.contains("factory") {
+            return .culinaryHub
+        }
+        return .restaurantCafe
+    }
+
+    private static let venueClassification: [String: VenueKind] = [
+        // Restaurants & Cafés
+        "lis-pasteis-belem": .restaurantCafe,
+        "mex-contramar": .restaurantCafe,
+
+        // Bars & Nightlife
+        "lis-pensao-amor": .barNightlife,
+        "kyo-pontocho": .barNightlife,
+
+        // Culinary Hubs
+        "lis-timeout": .culinaryHub,
+        "lis-lx-factory": .culinaryHub,
+        "kyo-nishiki": .culinaryHub,
+        "mex-coyoacan-market": .culinaryHub,
+        "kyo-gion": .culinaryHub
+    ]
 
     // MARK: - Curated Specific Location Menus (Google Menu Highlights)
 
@@ -133,7 +196,7 @@ enum PopularDishesService {
                  price: "€14.50")
         ],
 
-        // MARK: - Kyoto Dining, Markets & Nightlife Alleys
+        // MARK: - Kyoto Dining, Markets, Teahouses & Nightlife
         "kyo-nishiki": [
             Dish(name: "Tako Tamago Skewer",
                  note: "Candied baby octopus glazed in sweet soy sauce with a tender quail egg tucked inside the head.",
@@ -177,6 +240,28 @@ enum PopularDishesService {
                  note: "Whole river sweetfish skewered in a wave pattern, salted and roasted over glowing charcoal.",
                  imageURL: URL(string: "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=400&q=80"),
                  price: "¥1,100")
+        ],
+        "kyo-gion": [
+            Dish(name: "Gion Tsujiri Special Matcha Parfait",
+                 note: "Decadent tall parfait layered with rich Uji matcha soft serve, matcha castella cake, sweet azuki beans, and shiratama mochi.",
+                 imageURL: URL(string: "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=400&q=80"),
+                 price: "¥1,450"),
+            Dish(name: "Kagizen Yoshifusa Kuzukiri",
+                 note: "Historic Edo-period chilled arrowroot starch noodles served in ice water with dark roasted Okinawan kuromitsu molasses.",
+                 imageURL: URL(string: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80"),
+                 price: "¥1,200"),
+            Dish(name: "Gion Tanto Special Okonomiyaki",
+                 note: "Crispy cabbage okonomiyaki griddled with pork belly, calamari, and sweet savory tare sauce beside the Shirakawa canal.",
+                 imageURL: URL(string: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=400&q=80"),
+                 price: "¥1,350"),
+            Dish(name: "Gion Karyo Seasonal Kaiseki Platter",
+                 note: "Traditional multi-course Kyoto banquet featuring seasonal sashimi, simmered local vegetables, and grilled sea bream in a restored machiya.",
+                 imageURL: URL(string: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=400&q=80"),
+                 price: "¥6,500"),
+            Dish(name: "Ki No Bi Kyoto Artisanal Gin & Tonic",
+                 note: "Locally distilled Kyoto dry craft gin with native yellow yuzu, hinoki cypress wood, gyokuro green tea and sansho pepper.",
+                 imageURL: URL(string: "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?auto=format&fit=crop&w=400&q=80"),
+                 price: "¥1,500")
         ],
 
         // MARK: - Mexico City Dining & Markets
