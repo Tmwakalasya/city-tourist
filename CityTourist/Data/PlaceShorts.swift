@@ -93,22 +93,11 @@ final class PlaceShorts {
 
     // MARK: Links out
 
-    /// TikTok hashtag page for the location, e.g. "#joesstonecrab" or "#wynwoodwalls".
-    nonisolated static func tikTokHashtag(for place: Place) -> String {
-        let tag = place.name
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
-            .filter { $0.isASCII && ($0.isLetter || $0.isNumber) }
-        return tag.isEmpty ? "travel" : tag
-    }
-
-    /// TikTok search URL opening the location hashtag "#<placeName>".
+    /// TikTok has no search API for apps, so its own search opens instead.
     nonisolated static func tikTokURL(for place: Place, in city: City) -> URL {
-        let tag = tikTokHashtag(for: place)
-        if let components = URLComponents(string: "https://www.tiktok.com/tag/\(tag)"),
-           let url = components.url {
-            return url
-        }
-        return URL(string: "https://www.tiktok.com/search?q=%23\(tag)") ?? URL(string: "https://www.tiktok.com")!
+        var components = URLComponents(string: "https://www.tiktok.com/search")
+        components?.queryItems = [URLQueryItem(name: "q", value: "\(place.name) \(city.name)")]
+        return components?.url ?? URL(string: "https://www.tiktok.com")!
     }
 
     /// Category-tailored TikTok search angles so users can check the crowd,
@@ -123,21 +112,30 @@ final class PlaceShorts {
                 ("Inside", "inside night out")
             ]
         case .food:
-            return [
-                ("Vibe check", "food review"),
-                ("Must-order", "popular items on the menu"),
-                ("Honest review", "in depth honest review attendee experience")
+            var angles: [(label: String, suffix: String)] = [
+                ("Vibe check", "food review")
             ]
+            if PopularDishesService.hasItems(for: place.id) {
+                angles.append(("Must-order", "popular items on the menu"))
+            }
+            angles.append(("Honest review", "worth it review"))
+            return angles
         case .museum, .attraction:
-            return [
-                ("Vibe check", "walkthrough"),
-                ("Tips", "tips before you go")
+            var angles: [(label: String, suffix: String)] = [
+                ("Vibe check", "walkthrough")
             ]
+            if PlaceTipsService.hasTips(for: place.id) {
+                angles.append(("Tips", "tips before you go"))
+            }
+            return angles
         case .nature, .activity, .relaxation:
-            return [
-                ("Vibe check", "views"),
-                ("Tips", "what to know")
+            var angles: [(label: String, suffix: String)] = [
+                ("Vibe check", "views")
             ]
+            if PlaceTipsService.hasTips(for: place.id) {
+                angles.append(("Tips", "what to know"))
+            }
+            return angles
         }
     }
 

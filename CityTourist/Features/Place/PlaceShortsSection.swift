@@ -59,7 +59,7 @@ struct PlaceShortsSection: View {
                         in: RoundedRectangle(cornerRadius: 10, style: .continuous)
                     )
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Vibe Check")
+                    Text(L10n.text("Vibe Check"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Palette.ink)
                     Text("Tap an angle to preview \(place.name) in \(city.name)")
@@ -78,7 +78,7 @@ struct PlaceShortsSection: View {
                             Image(systemName: "sparkles")
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(Brand.rausch)
-                            Text(angle.label)
+                            Text(L10n.text(angle.label))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(Palette.ink)
                         }
@@ -385,11 +385,9 @@ struct VibeCheckSheet: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        if currentAngleLabel == "Must-order" && place.category == .food {
+                        if currentAngleLabel == "Must-order" && place.category == .food && PopularDishesService.hasItems(for: place.id) {
                             mustOrderView
-                        } else if currentAngleLabel == "Honest review" {
-                            honestReviewsSection
-                        } else if currentAngleLabel == "Tips" {
+                        } else if currentAngleLabel == "Tips" && PlaceTipsService.hasTips(for: place.id) {
                             tipsView
                         } else {
                             playerSection
@@ -412,9 +410,8 @@ struct VibeCheckSheet: View {
                         .tint(Brand.rausch)
                 }
                 if let clip = currentClip,
-                   !(currentAngleLabel == "Must-order" && place.category == .food),
-                   currentAngleLabel != "Honest review",
-                   currentAngleLabel != "Tips" {
+                   !(currentAngleLabel == "Must-order" && place.category == .food && PopularDishesService.hasItems(for: place.id)),
+                   !(currentAngleLabel == "Tips" && PlaceTipsService.hasTips(for: place.id)) {
                     ToolbarItem(placement: .topBarTrailing) {
                         Link(destination: clip.watchURL) {
                             Image(systemName: "arrow.up.right.square")
@@ -443,7 +440,7 @@ struct VibeCheckSheet: View {
                             Image(systemName: "sparkles")
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(isSelected ? Brand.rausch : Palette.inkMuted)
-                            Text(angle.label)
+                            Text(L10n.text(angle.label))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(isSelected ? Palette.canvas : Palette.ink)
                         }
@@ -552,10 +549,10 @@ struct VibeCheckSheet: View {
                     .font(.title2)
                     .foregroundStyle(Brand.rausch)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Must Order")
+                    Text(L10n.text("Must Order"))
                         .font(.title3.weight(.bold))
                         .foregroundStyle(Palette.ink)
-                    Text("Top 5 most popular items from the menu")
+                    Text(L10n.text("Top 5 most popular items from the menu"))
                         .font(.footnote)
                         .foregroundStyle(Palette.inkMuted)
                 }
@@ -595,56 +592,6 @@ struct VibeCheckSheet: View {
         }
     }
 
-    private var honestReviewsSection: some View {
-        let reviews = PlaceReviewsService.reviews(for: place)
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "quote.bubble.fill")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(Brand.rausch)
-                Text("REVIEWS FOR THIS LOCATION")
-                    .font(.caption2.weight(.bold))
-                    .tracking(0.8)
-                    .foregroundStyle(Palette.inkMuted)
-            }
-
-            VStack(spacing: 10) {
-                ForEach(reviews) { item in
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(item.author)
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(Palette.ink)
-                            Spacer()
-                            HStack(spacing: 2) {
-                                ForEach(1...5, id: \.self) { star in
-                                    Image(systemName: star <= item.rating ? "star.fill" : "star")
-                                        .font(.caption2)
-                                        .foregroundStyle(star <= item.rating ? Brand.rausch : Palette.inkFaint)
-                                }
-                            }
-                            Text("· \(item.timeAgo)")
-                                .font(.caption2)
-                                .foregroundStyle(Palette.inkMuted)
-                        }
-
-                        Text(item.comment)
-                            .font(.caption)
-                            .foregroundStyle(Palette.ink)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(Palette.hairline, lineWidth: 1)
-                    }
-                }
-            }
-        }
-    }
-
     private var tipsView: some View {
         let tips = PlaceTipsService.tips(for: place)
         return VStack(alignment: .leading, spacing: 14) {
@@ -652,14 +599,9 @@ struct VibeCheckSheet: View {
                 Image(systemName: "lightbulb.circle.fill")
                     .font(.title2)
                     .foregroundStyle(Brand.rausch)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Tips & Tricks")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(Palette.ink)
-                    Text("Practical advice and secrets from traveller forums")
-                        .font(.footnote)
-                        .foregroundStyle(Palette.inkMuted)
-                }
+                Text(L10n.text("Tips & Tricks"))
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(Palette.ink)
             }
             .padding(.bottom, 2)
 
@@ -744,9 +686,9 @@ struct VibeCheckSheet: View {
 
     private var externalAppLinks: some View {
         HStack(spacing: 10) {
-            Link(destination: PlaceShorts.tikTokURL(for: place, in: city)) {
+            Link(destination: PlaceShorts.tikTokVibeURL(for: place, in: city, angleSuffix: currentSuffix)) {
                 HStack(spacing: 6) {
-                    Text("Open in TikTok")
+                    Text(L10n.text("Open in TikTok"))
                     Image(systemName: "arrow.up.right")
                         .font(.caption.weight(.bold))
                 }
@@ -788,9 +730,8 @@ struct VibeCheckSheet: View {
     }
 
     private func loadClips() async {
-        if (currentAngleLabel == "Must-order" && place.category == .food)
-            || currentAngleLabel == "Honest review"
-            || currentAngleLabel == "Tips" {
+        if (currentAngleLabel == "Must-order" && place.category == .food && PopularDishesService.hasItems(for: place.id))
+            || (currentAngleLabel == "Tips" && PlaceTipsService.hasTips(for: place.id)) {
             isLoading = false
             clips = []
             return
