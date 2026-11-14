@@ -84,6 +84,7 @@ enum PopularDishesService {
     }
 
     /// Returns top 5 most popular items from the menu of such location.
+    @MainActor
     static func popularItems(for place: Place) -> [Dish] {
         if let items = curated[place.id], !items.isEmpty {
             return items
@@ -138,22 +139,271 @@ enum PopularDishesService {
         "kyo-gion": .culinaryHub
     ]
 
-    // MARK: - Dynamic Google Menu Highlights for Live Venues
+    // MARK: - Country & Currency Resolution
 
-    private static func currency(for place: Place) -> String {
-        switch place.cityID.lowercased() {
-        case "lisbon", "porto", "paris", "berlin", "rome", "madrid", "amsterdam", "barcelona":
+    /// Resolves the country name for a given place.
+    @MainActor
+    static func country(for place: Place) -> String {
+        // 1. Try City registered in CityDirectory
+        if let city = CityDirectory.knownCity(id: place.cityID), !city.country.isEmpty {
+            return city.country
+        }
+
+        // 2. Check bundled SampleData cities
+        if let sampleCity = SampleData.cities.first(where: { $0.id == place.cityID }), !sampleCity.country.isEmpty {
+            return sampleCity.country
+        }
+
+        // 3. Check place address / neighborhood string
+        let neighborhood = place.neighborhood
+        let normalizedNeighborhood = neighborhood.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).lowercased()
+
+        let recognizedCountries = [
+            "portugal", "spain", "france", "germany", "italy", "netherlands", "greece", "austria", "ireland",
+            "belgium", "finland", "croatia", "japan", "mexico", "united kingdom", "england", "scotland",
+            "canada", "australia", "switzerland", "united states", "usa", "brazil", "korea"
+        ]
+        for c in recognizedCountries {
+            if normalizedNeighborhood.contains(c) {
+                if c == "usa" || c == "united states" {
+                    return "United States"
+                }
+                if c == "uk" || c == "england" || c == "scotland" || c == "united kingdom" {
+                    return "United Kingdom"
+                }
+                if c == "korea" {
+                    return "South Korea"
+                }
+                return c.capitalized
+            }
+        }
+        if normalizedNeighborhood.contains("lisboa") {
+            return "Portugal"
+        }
+        if normalizedNeighborhood.contains("tokyo") || normalizedNeighborhood.contains("kyoto") || normalizedNeighborhood.contains("osaka") {
+            return "Japan"
+        }
+        if normalizedNeighborhood.contains("cdmx") || normalizedNeighborhood.contains("oaxaca") || normalizedNeighborhood.contains("cancun") {
+            return "Mexico"
+        }
+        if normalizedNeighborhood.contains("london") {
+            return "United Kingdom"
+        }
+        if normalizedNeighborhood.contains("paris") {
+            return "France"
+        }
+        if normalizedNeighborhood.contains("rome") || normalizedNeighborhood.contains("milano") || normalizedNeighborhood.contains("firenze") {
+            return "Italy"
+        }
+        if normalizedNeighborhood.contains("madrid") || normalizedNeighborhood.contains("barcelona") {
+            return "Spain"
+        }
+        if normalizedNeighborhood.contains("berlin") || normalizedNeighborhood.contains("munich") {
+            return "Germany"
+        }
+
+        // 3. Check cityID slug
+        let idLower = place.cityID.lowercased()
+        if idLower.contains("lisbon") || idLower.contains("porto") || idLower.contains("lisboa") {
+            return "Portugal"
+        }
+        if idLower.contains("kyoto") || idLower.contains("tokyo") || idLower.contains("osaka") {
+            return "Japan"
+        }
+        if idLower.contains("mexico") || idLower.contains("oaxaca") || idLower.contains("cancun") {
+            return "Mexico"
+        }
+        if idLower.contains("london") || idLower.contains("edinburgh") || idLower.contains("manchester") {
+            return "United Kingdom"
+        }
+        if idLower.contains("paris") || idLower.contains("nice") || idLower.contains("lyon") {
+            return "France"
+        }
+        if idLower.contains("rome") || idLower.contains("milan") || idLower.contains("florence") || idLower.contains("venice") {
+            return "Italy"
+        }
+        if idLower.contains("madrid") || idLower.contains("barcelona") || idLower.contains("seville") {
+            return "Spain"
+        }
+        if idLower.contains("berlin") || idLower.contains("munich") || idLower.contains("frankfurt") {
+            return "Germany"
+        }
+        if idLower.contains("amsterdam") {
+            return "Netherlands"
+        }
+        if idLower.contains("toronto") || idLower.contains("vancouver") || idLower.contains("montreal") {
+            return "Canada"
+        }
+        if idLower.contains("sydney") || idLower.contains("melbourne") {
+            return "Australia"
+        }
+        if idLower.contains("zurich") || idLower.contains("geneva") {
+            return "Switzerland"
+        }
+        if idLower.contains("new-york") || idLower.contains("nyc") || idLower.contains("chicago") || idLower.contains("san-francisco") || idLower.contains("los-angeles") {
+            return "United States"
+        }
+
+        // 4. Try nearest known city if coordinates are valid
+        if place.coordinate.latitude != 0 || place.coordinate.longitude != 0 {
+            let nearest = CityDirectory.nearest(to: place.coordinate)
+            if !nearest.country.isEmpty {
+                return nearest.country
+            }
+        }
+
+        // 5. Fallback to default directory city
+        let city = CityDirectory.city(id: place.cityID)
+        if !city.country.isEmpty {
+            return city.country
+        }
+
+        return "United States"
+    }
+
+    /// Resolves the currency symbol / code for a country.
+    static func currencySymbol(for country: String) -> String {
+        let normalized = country.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        if normalized.contains("portugal") || normalized.contains("spain") || normalized.contains("espana")
+            || normalized.contains("france") || normalized.contains("germany") || normalized.contains("deutschland")
+            || normalized.contains("italy") || normalized.contains("italia") || normalized.contains("netherlands")
+            || normalized.contains("holland") || normalized.contains("greece") || normalized.contains("austria")
+            || normalized.contains("ireland") || normalized.contains("belgium") || normalized.contains("finland")
+            || normalized.contains("croatia") || normalized.contains("luxembourg") || normalized.contains("estonia")
+            || normalized.contains("latvia") || normalized.contains("lithuania") || normalized.contains("slovakia")
+            || normalized.contains("slovenia") || normalized.contains("cyprus") || normalized.contains("malta")
+            || normalized.contains("monaco") || normalized.contains("andorra") {
             return "€"
-        case "kyoto", "tokyo", "osaka":
+        }
+        if normalized.contains("japan") || normalized.contains("nippon") || normalized.contains("nihon") {
             return "¥"
-        case "mexico-city", "cancun", "oaxaca":
+        }
+        if normalized.contains("mexico") || normalized.contains("méxico") {
             return "$ MXN"
-        case "london":
+        }
+        if normalized.contains("united kingdom") || normalized.contains("uk") || normalized.contains("england")
+            || normalized.contains("scotland") || normalized.contains("wales") || normalized.contains("great britain") {
             return "£"
-        default:
+        }
+        if normalized.contains("canada") {
+            return "$ CAD"
+        }
+        if normalized.contains("australia") {
+            return "$ AUD"
+        }
+        if normalized.contains("new zealand") {
+            return "$ NZD"
+        }
+        if normalized.contains("switzerland") || normalized.contains("schweiz") || normalized.contains("suisse") {
+            return "CHF"
+        }
+        if normalized.contains("brazil") || normalized.contains("brasil") {
+            return "R$"
+        }
+        if normalized.contains("south korea") || normalized.contains("korea") {
+            return "₩"
+        }
+        if normalized.contains("india") {
+            return "₹"
+        }
+        if normalized.contains("china") {
+            return "¥"
+        }
+        if normalized.contains("singapore") {
+            return "$ SGD"
+        }
+        if normalized.contains("hong kong") {
+            return "$ HKD"
+        }
+        if normalized.contains("sweden") || normalized.contains("sverige") {
+            return "kr"
+        }
+        if normalized.contains("norway") || normalized.contains("norge") {
+            return "kr"
+        }
+        if normalized.contains("denmark") || normalized.contains("danmark") {
+            return "kr"
+        }
+        if normalized.contains("united states") || normalized.contains("usa") || normalized.contains("america") {
             return "$"
         }
+        return "$"
     }
+
+    /// Resolves the currency symbol / code for a venue based on its country.
+    @MainActor
+    static func currency(for place: Place) -> String {
+        currencySymbol(for: country(for: place))
+    }
+
+    /// Formats a typical menu item price given its base EUR amount and the target currency symbol.
+    static func formatPrice(eur: Double, currencySymbol: String) -> String {
+        switch currencySymbol {
+        case "€":
+            return String(format: "€%.2f", eur)
+        case "¥":
+            let jpy = Int(round(eur * 160.0 / 50.0) * 50.0)
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .decimal
+            let str = formatter.string(from: NSNumber(value: jpy)) ?? "\(jpy)"
+            return "¥\(str)"
+        case "₩":
+            let krw = Int(round(eur * 1450.0 / 500.0) * 500.0)
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .decimal
+            let str = formatter.string(from: NSNumber(value: krw)) ?? "\(krw)"
+            return "₩\(str)"
+        case "$ MXN":
+            let mxn = Int(round(eur * 20.0 / 5.0) * 5.0)
+            return "$\(mxn) MXN"
+        case "£":
+            let gbp = round(eur * 0.85 * 2.0) / 2.0
+            return String(format: "£%.2f", gbp)
+        case "$ CAD":
+            let cad = round(eur * 1.48 * 2.0) / 2.0
+            return String(format: "$%.2f CAD", cad)
+        case "$ AUD":
+            let aud = round(eur * 1.65 * 2.0) / 2.0
+            return String(format: "$%.2f AUD", aud)
+        case "$ NZD":
+            let nzd = round(eur * 1.80 * 2.0) / 2.0
+            return String(format: "$%.2f NZD", nzd)
+        case "$ SGD":
+            let sgd = round(eur * 1.45 * 2.0) / 2.0
+            return String(format: "$%.2f SGD", sgd)
+        case "$ HKD":
+            let hkd = Int(round(eur * 8.4 / 5.0) * 5.0)
+            return "$\(hkd) HKD"
+        case "CHF":
+            let chf = round(eur * 0.95 * 2.0) / 2.0
+            return String(format: "CHF %.2f", chf)
+        case "R$":
+            let brl = round(eur * 5.5 * 2.0) / 2.0
+            return String(format: "R$ %.2f", brl)
+        case "kr":
+            let kr = Int(round(eur * 11.5 / 5.0) * 5.0)
+            return "\(kr) kr"
+        case "₹":
+            let inr = Int(round(eur * 90.0 / 10.0) * 10.0)
+            return "₹\(inr)"
+        case "$":
+            let usd = round(eur * 1.10 * 2.0) / 2.0
+            return String(format: "$%.2f", usd)
+        default:
+            return String(format: "%@%.2f", currencySymbol, eur)
+        }
+    }
+
+    /// Formats a typical menu item price for the venue based on its country.
+    @MainActor
+    static func formatPrice(eur: Double, for place: Place) -> String {
+        formatPrice(eur: eur, currencySymbol: currency(for: place))
+    }
+
+    // MARK: - Dynamic Google Menu Highlights for Live Venues
 
     private static func matches(_ text: String, keywords: [String]) -> Bool {
         let normalized = text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
@@ -163,17 +413,17 @@ enum PopularDishesService {
         }
     }
 
+    @MainActor
     private static func generateMenuHighlights(for place: Place) -> [Dish] {
         let text = "\(place.name) \(place.blurb) \(place.about) \(place.tags.joined(separator: " "))"
-        let curr = currency(for: place)
 
         // 1. Cafés, Specialty Coffee, Bakeries & Brunch (e.g. Hygge Kaffe)
         if matches(text, keywords: ["kaffe", "coffee", "cafe", "café", "bakery", "padaria", "brunch", "breakfast", "pastry", "espresso", "roasters", "bagel", "tea"]) {
-            let p1 = curr == "¥" ? "¥450" : (curr == "$ MXN" ? "$75 MXN" : "€3.80")
-            let p2 = curr == "¥" ? "¥600" : (curr == "$ MXN" ? "$85 MXN" : "€3.50")
-            let p3 = curr == "¥" ? "¥1,100" : (curr == "$ MXN" ? "$160 MXN" : "€8.50")
-            let p4 = curr == "¥" ? "¥1,300" : (curr == "$ MXN" ? "$185 MXN" : "€9.50")
-            let p5 = curr == "¥" ? "¥950" : (curr == "$ MXN" ? "$140 MXN" : "€7.50")
+            let p1 = formatPrice(eur: 3.80, for: place)
+            let p2 = formatPrice(eur: 3.50, for: place)
+            let p3 = formatPrice(eur: 8.50, for: place)
+            let p4 = formatPrice(eur: 9.50, for: place)
+            let p5 = formatPrice(eur: 7.50, for: place)
             return [
                 Dish(name: "Artisanal Cinnamon & Cardamom Swirl",
                      note: "Warm, freshly baked pastry bun with aromatic cardamom spice and pearl sugar crystals.",
@@ -200,11 +450,11 @@ enum PopularDishesService {
 
         // 2. Bars, Speakeasies, Lounges & Nightlife
         if place.category == .nightlife || matches(text, keywords: ["cocktail", "speakeasy", "lounge", "pub", "brewery", "taproom", "wine bar", "gin", "beer"]) {
-            let p1 = curr == "¥" ? "¥1,600" : (curr == "$ MXN" ? "$220 MXN" : "€12.00")
-            let p2 = curr == "¥" ? "¥1,500" : (curr == "$ MXN" ? "$210 MXN" : "€11.50")
-            let p3 = curr == "¥" ? "¥1,400" : (curr == "$ MXN" ? "$190 MXN" : "€10.50")
-            let p4 = curr == "¥" ? "¥1,800" : (curr == "$ MXN" ? "$280 MXN" : "€15.00")
-            let p5 = curr == "¥" ? "¥900" : (curr == "$ MXN" ? "$140 MXN" : "€7.00")
+            let p1 = formatPrice(eur: 12.00, for: place)
+            let p2 = formatPrice(eur: 11.50, for: place)
+            let p3 = formatPrice(eur: 10.50, for: place)
+            let p4 = formatPrice(eur: 15.00, for: place)
+            let p5 = formatPrice(eur: 7.00, for: place)
             return [
                 Dish(name: "Signature House Craft Cocktail",
                      note: "Bespoke cocktail infused with seasonal botanicals, premium spirits, fresh citrus and house bitters.",
@@ -231,18 +481,18 @@ enum PopularDishesService {
 
         // 3. Italian, Pizzeria & Pasta
         if matches(text, keywords: ["pizza", "pizzeria", "pasta", "trattoria", "osteria", "italian"]) {
-            let p1 = curr == "¥" ? "¥1,800" : (curr == "$ MXN" ? "$260 MXN" : "€13.50")
-            let p2 = curr == "¥" ? "¥1,900" : (curr == "$ MXN" ? "$280 MXN" : "€15.00")
-            let p3 = curr == "¥" ? "¥1,600" : (curr == "$ MXN" ? "$240 MXN" : "€12.50")
-            let p4 = curr == "¥" ? "¥1,500" : (curr == "$ MXN" ? "$220 MXN" : "€11.00")
-            let p5 = curr == "¥" ? "¥900" : (curr == "$ MXN" ? "$130 MXN" : "€6.50")
+            let p1 = formatPrice(eur: 13.50, for: place)
+            let p2 = formatPrice(eur: 15.00, for: place)
+            let p3 = formatPrice(eur: 12.50, for: place)
+            let p4 = formatPrice(eur: 11.00, for: place)
+            let p5 = formatPrice(eur: 6.50, for: place)
             return [
                 Dish(name: "Wood-Fired Margherita D.O.P.",
                      note: "San Marzano tomato sauce, buffalo mozzarella, fresh basil and extra virgin olive oil on leopard-crusted dough.",
                      imageURL: URL(string: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=400&q=80"),
                      price: p1),
                 Dish(name: "Handmade Truffle Tagliatelle",
-                     note: "Fresh bronze-drawn egg tagliatelle tossed in cultured butter, shaved black truffle and aged Parmigiano Reggiano.",
+                     note: "Fresh bronze-drawn egg tagliatelle tossed in cultured butter, shaved black truffle and aged Parmigiano Regiano.",
                      imageURL: URL(string: "https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=400&q=80"),
                      price: p2),
                 Dish(name: "Burrata Pugliese con Prosciutto",
@@ -262,11 +512,11 @@ enum PopularDishesService {
 
         // 4. Japanese, Ramen, Sushi & Asian Dining
         if matches(text, keywords: ["ramen", "sushi", "izakaya", "udon", "noodles", "soba", "tempura", "japanese", "asian"]) {
-            let p1 = curr == "¥" ? "¥1,100" : (curr == "$ MXN" ? "$190 MXN" : "€13.50")
-            let p2 = curr == "¥" ? "¥2,400" : (curr == "$ MXN" ? "$340 MXN" : "€18.00")
-            let p3 = curr == "¥" ? "¥600" : (curr == "$ MXN" ? "$95 MXN" : "€6.50")
-            let p4 = curr == "¥" ? "¥1,200" : (curr == "$ MXN" ? "$180 MXN" : "€11.00")
-            let p5 = curr == "¥" ? "¥550" : (curr == "$ MXN" ? "$85 MXN" : "€5.50")
+            let p1 = formatPrice(eur: 13.50, for: place)
+            let p2 = formatPrice(eur: 18.00, for: place)
+            let p3 = formatPrice(eur: 6.50, for: place)
+            let p4 = formatPrice(eur: 11.00, for: place)
+            let p5 = formatPrice(eur: 5.50, for: place)
             return [
                 Dish(name: "Signature Tonkotsu Ramen",
                      note: "Rich 16-hour simmered pork bone broth with tender rolled chashu, jammy ajitama egg, and scallions.",
@@ -293,11 +543,11 @@ enum PopularDishesService {
 
         // 5. Mexican, Tacos & Latin Dining
         if matches(text, keywords: ["taco", "taqueria", "taquería", "mexican", "cantina", "antojitos", "burrito", "quesadilla"]) {
-            let p1 = curr == "¥" ? "¥950" : (curr == "$ MXN" ? "$85 MXN" : "€7.50")
-            let p2 = curr == "¥" ? "¥1,100" : (curr == "$ MXN" ? "$120 MXN" : "€8.50")
-            let p3 = curr == "¥" ? "¥1,300" : (curr == "$ MXN" ? "$145 MXN" : "€9.50")
-            let p4 = curr == "¥" ? "¥1,050" : (curr == "$ MXN" ? "$95 MXN" : "€7.00")
-            let p5 = curr == "¥" ? "¥600" : (curr == "$ MXN" ? "$60 MXN" : "€5.00")
+            let p1 = formatPrice(eur: 7.50, for: place)
+            let p2 = formatPrice(eur: 8.50, for: place)
+            let p3 = formatPrice(eur: 9.50, for: place)
+            let p4 = formatPrice(eur: 7.00, for: place)
+            let p5 = formatPrice(eur: 5.00, for: place)
             return [
                 Dish(name: "Tacos al Pastor Tradicionales",
                      note: "Achiote-marinated pork roasted on the trompo, carved with roasted pineapple, fresh cilantro, onion, and salsa verde.",
@@ -324,11 +574,11 @@ enum PopularDishesService {
 
         // 6. Portuguese Tasca, Seafood & Mediterranean Dining (Lisbon & Mediterranean default)
         if matches(text, keywords: ["lisboa", "lisbon", "marisco", "peixe", "bacalhau", "tasca", "portuguesa", "portuguese", "seafood"]) {
-            let p1 = curr == "¥" ? "¥2,200" : (curr == "$ MXN" ? "$320 MXN" : "€16.50")
-            let p2 = curr == "¥" ? "¥1,800" : (curr == "$ MXN" ? "$260 MXN" : "€13.50")
-            let p3 = curr == "¥" ? "¥1,600" : (curr == "$ MXN" ? "$220 MXN" : "€12.00")
-            let p4 = curr == "¥" ? "¥800" : (curr == "$ MXN" ? "$110 MXN" : "€6.50")
-            let p5 = curr == "¥" ? "¥400" : (curr == "$ MXN" ? "$50 MXN" : "€2.50")
+            let p1 = formatPrice(eur: 16.50, for: place)
+            let p2 = formatPrice(eur: 13.50, for: place)
+            let p3 = formatPrice(eur: 12.00, for: place)
+            let p4 = formatPrice(eur: 6.50, for: place)
+            let p5 = formatPrice(eur: 2.50, for: place)
             return [
                 Dish(name: "Polvo à Lagareiro",
                      note: "Tender roasted Atlantic octopus served with crushed roasted garlic potatoes and extra virgin olive oil.",
@@ -354,11 +604,11 @@ enum PopularDishesService {
         }
 
         // 7. General Dining, Bistro & Culinary Highlights (Global Fallback for any restaurant)
-        let p1 = curr == "¥" ? "¥2,600" : (curr == "$ MXN" ? "$340 MXN" : "€18.50")
-        let p2 = curr == "¥" ? "¥1,800" : (curr == "$ MXN" ? "$260 MXN" : "€14.50")
-        let p3 = curr == "¥" ? "¥1,400" : (curr == "$ MXN" ? "$190 MXN" : "€11.00")
-        let p4 = curr == "¥" ? "¥950" : (curr == "$ MXN" ? "$130 MXN" : "€7.50")
-        let p5 = curr == "¥" ? "¥850" : (curr == "$ MXN" ? "$120 MXN" : "€6.50")
+        let p1 = formatPrice(eur: 18.50, for: place)
+        let p2 = formatPrice(eur: 14.50, for: place)
+        let p3 = formatPrice(eur: 11.00, for: place)
+        let p4 = formatPrice(eur: 7.50, for: place)
+        let p5 = formatPrice(eur: 6.50, for: place)
         return [
             Dish(name: "Chef's Signature Daily Catch / Cut",
                  note: "Pan-seared fresh market fish or prime cut served with seasonal glazed vegetables and herb butter sauce.",

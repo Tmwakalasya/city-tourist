@@ -3,6 +3,7 @@ import Foundation
 @testable import CityTourist
 
 /// Short videos on place pages: matching, durations and the links out.
+@MainActor
 struct PlaceShortsTests {
 
     @Test func youTubeDurationsReadAsSeconds() {
@@ -127,6 +128,103 @@ struct PlaceShortsTests {
         #expect(!reviews.isEmpty)
         #expect(reviews.allSatisfy { $0.rating >= 4 })
         #expect(reviews.allSatisfy { !$0.author.isEmpty && !$0.comment.isEmpty })
+    }
+
+    @Test func countryBasedCurrencyResolution() {
+        // Country symbol resolution
+        #expect(PopularDishesService.currencySymbol(for: "Portugal") == "€")
+        #expect(PopularDishesService.currencySymbol(for: "Spain") == "€")
+        #expect(PopularDishesService.currencySymbol(for: "France") == "€")
+        #expect(PopularDishesService.currencySymbol(for: "Italy") == "€")
+        #expect(PopularDishesService.currencySymbol(for: "Germany") == "€")
+        #expect(PopularDishesService.currencySymbol(for: "Japan") == "¥")
+        #expect(PopularDishesService.currencySymbol(for: "Mexico") == "$ MXN")
+        #expect(PopularDishesService.currencySymbol(for: "United Kingdom") == "£")
+        #expect(PopularDishesService.currencySymbol(for: "Canada") == "$ CAD")
+        #expect(PopularDishesService.currencySymbol(for: "Australia") == "$ AUD")
+        #expect(PopularDishesService.currencySymbol(for: "Switzerland") == "CHF")
+        #expect(PopularDishesService.currencySymbol(for: "United States") == "$")
+
+        // Currency resolution for places by country
+        let lisbonPlace = Place(
+            id: "test-lisbon-cafe",
+            name: "Hygge Kaffe",
+            cityID: "lisbon",
+            category: .food,
+            neighborhood: "R. Tomás Ribeiro 95B, Lisboa",
+            rating: 4.6,
+            reviewCount: 500,
+            priceLevel: 2,
+            typicalMinutes: 45,
+            blurb: "Nordic cafe",
+            about: "Danish cafe in Lisbon",
+            coordinate: Coordinate(latitude: 38.7330, longitude: -9.1480),
+            tags: ["Coffee", "Cafe"]
+        )
+        #expect(PopularDishesService.country(for: lisbonPlace) == "Portugal")
+        #expect(PopularDishesService.currency(for: lisbonPlace) == "€")
+        let lisbonItems = PopularDishesService.popularItems(for: lisbonPlace)
+        #expect(lisbonItems.allSatisfy { $0.price?.contains("€") == true })
+
+        let londonPlace = Place(
+            id: "test-london-pub",
+            name: "The Churchill Arms",
+            cityID: "london",
+            category: .nightlife,
+            neighborhood: "Kensington, London, UK",
+            rating: 4.5,
+            reviewCount: 1200,
+            priceLevel: 2,
+            typicalMinutes: 60,
+            blurb: "Historic pub",
+            about: "Famous floral pub serving real ales",
+            coordinate: Coordinate(latitude: 51.5074, longitude: -0.1950),
+            tags: ["Pub", "Beer"]
+        )
+        #expect(PopularDishesService.country(for: londonPlace) == "United Kingdom")
+        #expect(PopularDishesService.currency(for: londonPlace) == "£")
+        let londonItems = PopularDishesService.popularItems(for: londonPlace)
+        #expect(londonItems.allSatisfy { $0.price?.contains("£") == true })
+
+        let tokyoPlace = Place(
+            id: "test-tokyo-ramen",
+            name: "Afuri Ramen",
+            cityID: "tokyo",
+            category: .food,
+            neighborhood: "Ebisu, Tokyo, Japan",
+            rating: 4.7,
+            reviewCount: 2000,
+            priceLevel: 2,
+            typicalMinutes: 40,
+            blurb: "Yuzu ramen shop",
+            about: "Delicate chicken broth with yuzu citrus",
+            coordinate: Coordinate(latitude: 35.6467, longitude: 139.7101),
+            tags: ["Ramen", "Noodles"]
+        )
+        #expect(PopularDishesService.country(for: tokyoPlace) == "Japan")
+        #expect(PopularDishesService.currency(for: tokyoPlace) == "¥")
+        let tokyoItems = PopularDishesService.popularItems(for: tokyoPlace)
+        #expect(tokyoItems.allSatisfy { $0.price?.contains("¥") == true })
+
+        let nyPlace = Place(
+            id: "test-ny-pizza",
+            name: "Joe's Pizza",
+            cityID: "new-york",
+            category: .food,
+            neighborhood: "Greenwich Village, New York, NY, USA",
+            rating: 4.8,
+            reviewCount: 3500,
+            priceLevel: 1,
+            typicalMinutes: 30,
+            blurb: "Classic NY slice joint",
+            about: "Fresh hot plain and pepperoni slices",
+            coordinate: Coordinate(latitude: 40.7306, longitude: -74.0021),
+            tags: ["Pizza", "Italian"]
+        )
+        #expect(PopularDishesService.country(for: nyPlace) == "United States")
+        #expect(PopularDishesService.currency(for: nyPlace) == "$")
+        let nyItems = PopularDishesService.popularItems(for: nyPlace)
+        #expect(nyItems.allSatisfy { $0.price?.contains("$") == true })
     }
 }
 
