@@ -386,7 +386,7 @@ struct VibeCheckSheet: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        if currentAngleLabel == "Must-order" && place.category == .food {
+                        if currentAngleLabel == "Must-order" && PopularDishesService.hasItems(for: place) {
                             mustOrderView
                         } else if currentAngleLabel == "Honest review" {
                             honestReviewsSection
@@ -413,7 +413,7 @@ struct VibeCheckSheet: View {
                         .tint(Brand.rausch)
                 }
                 if let clip = currentClip,
-                   !(currentAngleLabel == "Must-order" && place.category == .food),
+                   !(currentAngleLabel == "Must-order" && PopularDishesService.hasItems(for: place)),
                    currentAngleLabel != "Honest review",
                    !(currentAngleLabel == "Tips" && PlaceTipsService.hasTips(for: place.id)) {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -545,11 +545,15 @@ struct VibeCheckSheet: View {
         }
     }
 
+    private var isBarOrNightlife: Bool {
+        place.category == .nightlife
+    }
+
     private var mustOrderView: some View {
         let dishes = PopularDishesService.popularItems(for: place)
         return VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
-                Image(systemName: "fork.knife.circle.fill")
+                Image(systemName: isBarOrNightlife ? "wineglass.fill" : "fork.knife.circle.fill")
                     .font(.title2)
                     .foregroundStyle(Brand.rausch)
                 VStack(alignment: .leading, spacing: 2) {
@@ -564,7 +568,9 @@ struct VibeCheckSheet: View {
                             .padding(.vertical, 2)
                             .background(Brand.rausch.opacity(0.1), in: Capsule())
                     }
-                    Text(L10n.text("Top 5 most popular items from the menu"))
+                    Text(isBarOrNightlife
+                         ? L10n.text("Top 5 most popular drinks & bites from the menu")
+                         : L10n.text("Top 5 most popular items from the menu"))
                         .font(.footnote)
                         .foregroundStyle(Palette.inkMuted)
                 }
@@ -638,7 +644,7 @@ struct VibeCheckSheet: View {
     private func dishFallback(index: Int) -> some View {
         ZStack {
             Palette.elevated
-            Image(systemName: "fork.knife")
+            Image(systemName: isBarOrNightlife ? "wineglass" : "fork.knife")
                 .font(.title3)
                 .foregroundStyle(Palette.inkFaint)
         }
@@ -886,7 +892,7 @@ struct VibeCheckSheet: View {
     }
 
     private func loadClips() async {
-        if currentAngleLabel == "Must-order" && place.category == .food {
+        if currentAngleLabel == "Must-order" && PopularDishesService.hasItems(for: place) {
             isLoading = false
             clips = []
             reviews = []

@@ -105,35 +105,45 @@ final class PlaceShorts {
     nonisolated static func vibeAngles(for place: Place) -> [(label: String, suffix: String)] {
         switch place.category {
         case .nightlife:
-            return [
-                ("Vibe check", "nightlife vibe"),
-                ("Crowd & DJ", "crowd DJ"),
-                ("Dress code", "dress code line"),
-                ("Inside", "inside night out")
-            ]
-        case .food:
             var angles: [(label: String, suffix: String)] = [
-                ("Vibe check", "food review")
+                (label: "Vibe check", suffix: "nightlife vibe")
             ]
             if PopularDishesService.hasItems(for: place) {
-                angles.append(("Must-order", "popular items on the menu"))
+                angles.append((label: "Must-order", suffix: "cocktail bar menu"))
             }
-            angles.append(("Honest review", "worth it review"))
+            angles.append((label: "Crowd & DJ", suffix: "crowd DJ"))
+            angles.append((label: "Dress code", suffix: "dress code line"))
+            angles.append((label: "Inside", suffix: "inside night out"))
+            return angles
+        case .food:
+            var angles: [(label: String, suffix: String)] = [
+                (label: "Vibe check", suffix: "food review")
+            ]
+            if PopularDishesService.hasItems(for: place) {
+                angles.append((label: "Must-order", suffix: "popular items on the menu"))
+            }
+            angles.append((label: "Honest review", suffix: "worth it review"))
             return angles
         case .museum, .attraction:
             var angles: [(label: String, suffix: String)] = [
-                ("Vibe check", "walkthrough")
+                (label: "Vibe check", suffix: "walkthrough")
             ]
+            if PopularDishesService.hasItems(for: place) {
+                angles.append((label: "Must-order", suffix: "popular items on the menu"))
+            }
             if PlaceTipsService.hasTips(for: place.id) {
-                angles.append(("Tips", "tips before you go"))
+                angles.append((label: "Tips", suffix: "tips before you go"))
             }
             return angles
         case .nature, .activity, .relaxation:
             var angles: [(label: String, suffix: String)] = [
-                ("Vibe check", "views")
+                (label: "Vibe check", suffix: "views")
             ]
+            if PopularDishesService.hasItems(for: place) {
+                angles.append((label: "Must-order", suffix: "popular items on the menu"))
+            }
             if PlaceTipsService.hasTips(for: place.id) {
-                angles.append(("Tips", "what to know"))
+                angles.append((label: "Tips", suffix: "what to know"))
             }
             return angles
         }

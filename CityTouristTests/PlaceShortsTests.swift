@@ -35,55 +35,49 @@ struct PlaceShortsTests {
     }
 
     @Test func popularDishesGenerationForFoodVenues() throws {
-        // 1. Curated venue
+        // 1. Curated restaurant venues
         let belem = try #require(SampleData.place(id: "lis-pasteis-belem"))
         let belemItems = PopularDishesService.popularItems(for: belem)
         #expect(belemItems.count == 5)
         #expect(belemItems.contains { $0.name == "Pastel de Belém" && $0.imageURL != nil && $0.price != nil })
+        #expect(PopularDishesService.hasItems(for: belem))
 
-        // 2. Dynamic generation for arbitrary food places
-        let ramenPlace = Place(
-            id: "tok-ichiran",
-            name: "Ichiran Ramen",
-            cityID: "tokyo",
-            category: .food,
-            neighborhood: "Shibuya",
-            rating: 4.6,
-            reviewCount: 5200,
-            priceLevel: 2,
-            typicalMinutes: 45,
-            blurb: "Classic tonkotsu ramen counter",
-            about: "Solo dining booths with customizable tonkotsu broth and thin noodles.",
-            coordinate: Coordinate(latitude: 35.6580, longitude: 139.7016),
-            tags: ["Ramen", "Noodles", "Late Night"]
-        )
-        let ramenDishes = PopularDishesService.popularItems(for: ramenPlace)
-        #expect(ramenDishes.count == 5)
-        #expect(ramenDishes.first?.name.contains("Ramen") == true)
-        #expect(ramenDishes.first?.imageURL != nil)
+        let contramar = try #require(SampleData.place(id: "mex-contramar"))
+        let contramarItems = PopularDishesService.popularItems(for: contramar)
+        #expect(contramarItems.count == 5)
+        #expect(contramarItems.contains { $0.name == "Tostadas de Atún Fresco" && $0.imageURL != nil && $0.price != nil })
 
-        let tacoPlace = Place(
-            id: "cdmx-taqueria",
-            name: "El Huequito",
-            cityID: "mexico-city",
-            category: .food,
-            neighborhood: "Centro",
-            rating: 4.5,
-            reviewCount: 3100,
-            priceLevel: 1,
-            typicalMinutes: 30,
-            blurb: "Historic taquería serving pastor",
-            about: "Famous for tacos al pastor and fresh guacamole.",
-            coordinate: Coordinate(latitude: 19.4326, longitude: -99.1332),
-            tags: ["Tacos", "Taqueria", "Street Food"]
-        )
-        let tacoDishes = PopularDishesService.popularItems(for: tacoPlace)
-        #expect(tacoDishes.count == 5)
-        #expect(tacoDishes.contains { $0.name.contains("Pastor") })
+        // 2. Curated bar / nightlife venues
+        let pensao = try #require(SampleData.place(id: "lis-pensao-amor"))
+        let pensaoItems = PopularDishesService.popularItems(for: pensao)
+        #expect(pensaoItems.count == 5)
+        #expect(pensaoItems.contains { $0.name.contains("Amor") && $0.imageURL != nil && $0.price != nil })
+        #expect(PopularDishesService.hasItems(for: pensao))
 
-        // 3. Non-food places return empty
+        let pontocho = try #require(SampleData.place(id: "kyo-pontocho"))
+        let pontochoItems = PopularDishesService.popularItems(for: pontocho)
+        #expect(pontochoItems.count == 5)
+        #expect(pontochoItems.contains { $0.name.contains("Yakitori") && $0.imageURL != nil })
+
+        // 3. Curated culinary strip venues
+        let lxfactory = try #require(SampleData.place(id: "lis-lx-factory"))
+        let lxItems = PopularDishesService.popularItems(for: lxfactory)
+        #expect(lxItems.count == 5)
+        #expect(lxItems.contains { $0.name.contains("Landeau") })
+
+        // 4. Vibe angles include Must-order for food, bars, and culinary places
+        let belemAngles = PlaceShorts.vibeAngles(for: belem)
+        #expect(belemAngles.contains { $0.label == "Must-order" })
+
+        let pensaoAngles = PlaceShorts.vibeAngles(for: pensao)
+        #expect(pensaoAngles.contains { $0.label == "Must-order" })
+
+        // 5. Non-menu venues return empty and do not have Must-order
         let tower = try #require(SampleData.place(id: "lis-belem-tower"))
         #expect(PopularDishesService.popularItems(for: tower).isEmpty)
+        #expect(!PopularDishesService.hasItems(for: tower))
+        let towerAngles = PlaceShorts.vibeAngles(for: tower)
+        #expect(!towerAngles.contains { $0.label == "Must-order" })
     }
 
     @Test func realReviewsForSampleVenues() async throws {
