@@ -265,6 +265,35 @@ struct GooglePlacesService {
         return place
     }
 
+    // MARK: Real Reviews
+
+    /// Fetches authentic attendee/visitor reviews for a place from Google Places API.
+    func fetchReviews(placeID: String) async throws -> [PlaceReviewsService.ReviewItem] {
+        guard let url = URL(string: "https://places.googleapis.com/v1/places/\(placeID)") else {
+            throw ServiceError.transport(URLError(.badURL))
+        }
+        var request = URLRequest(url: url)
+        authorize(&request)
+        request.setValue("reviews", forHTTPHeaderField: "X-Goog-FieldMask")
+
+        let (data, response) = try await send(request)
+        try Self.check(response, data)
+        let decoded = try JSONDecoder().decode(ReviewsResponse.self, from: data)
+
+        return (decoded.reviews ?? []).compactMap { item -> PlaceReviewsService.ReviewItem? in
+            let text = item.text?.text ?? item.originalText?.text ?? ""
+            guard !text.isEmpty else { return nil }
+            return PlaceReviewsService.ReviewItem(
+                id: item.name ?? UUID().uuidString,
+                author: item.authorAttribution?.displayName ?? "Google Reviewer",
+                rating: item.rating ?? 5,
+                timeAgo: item.relativePublishTimeDescription ?? "Recent review",
+                comment: text,
+                source: "Verified Google Review"
+            )
+        }
+    }
+
     // MARK: City search
 
     /// Autocomplete over cities only. Cheap and partial-match friendly, so it
@@ -520,6 +549,26 @@ struct GooglePlacesService {
 }
 
 // MARK: - Wire format
+
+private struct ReviewsResponse: Decodable {
+    struct Review: Decodable {
+        struct Author: Decodable {
+            let displayName: String?
+            let photoUri: String?
+            let uri: String?
+        }
+        struct TextContent: Decodable {
+            let text: String?
+        }
+        let name: String?
+        let rating: Int?
+        let relativePublishTimeDescription: String?
+        let text: TextContent?
+        let originalText: TextContent?
+        let authorAttribution: Author?
+    }
+    let reviews: [Review]?
+}
 
 private struct NearbyResponse: Decodable {
     let places: [GooglePlace]?

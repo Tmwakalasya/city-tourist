@@ -348,6 +348,7 @@ struct VibeCheckSheet: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var angleIndex: Int
     @State private var clips: [PlaceShort] = []
+    @State private var reviews: [PlaceReviewsService.ReviewItem] = []
     @State private var selectedClipIndex = 0
     @State private var isLoading = true
     @State private var playback = PlaceVideoPlayback()
@@ -385,8 +386,10 @@ struct VibeCheckSheet: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        if currentAngleLabel == "Must-order" && place.category == .food && PopularDishesService.hasItems(for: place.id) {
+                        if currentAngleLabel == "Must-order" && place.category == .food {
                             mustOrderView
+                        } else if currentAngleLabel == "Honest review" {
+                            honestReviewsSection
                         } else if currentAngleLabel == "Tips" && PlaceTipsService.hasTips(for: place.id) {
                             tipsView
                         } else {
@@ -410,7 +413,8 @@ struct VibeCheckSheet: View {
                         .tint(Brand.rausch)
                 }
                 if let clip = currentClip,
-                   !(currentAngleLabel == "Must-order" && place.category == .food && PopularDishesService.hasItems(for: place.id)),
+                   !(currentAngleLabel == "Must-order" && place.category == .food),
+                   currentAngleLabel != "Honest review",
                    !(currentAngleLabel == "Tips" && PlaceTipsService.hasTips(for: place.id)) {
                     ToolbarItem(placement: .topBarTrailing) {
                         Link(destination: clip.watchURL) {
@@ -592,6 +596,110 @@ struct VibeCheckSheet: View {
         }
     }
 
+    private var honestReviewsSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "quote.bubble.fill")
+                    .font(.title2)
+                    .foregroundStyle(Brand.rausch)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L10n.text("Honest Reviews"))
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(Palette.ink)
+                    Text(L10n.text("Real feedback from verified visitors"))
+                        .font(.footnote)
+                        .foregroundStyle(Palette.inkMuted)
+                }
+            }
+            .padding(.bottom, 2)
+
+            if isLoading {
+                VStack(spacing: 12) {
+                    ProgressView().tint(Brand.rausch)
+                    Text(L10n.text("Loading real reviews…"))
+                        .font(.caption)
+                        .foregroundStyle(Palette.inkMuted)
+                }
+                .frame(maxWidth: .infinity, minHeight: 120)
+                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else if reviews.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "text.bubble")
+                        .font(.title2)
+                        .foregroundStyle(Palette.inkMuted)
+                    Text(L10n.text("No written reviews available yet"))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Palette.ink)
+                    Text(L10n.text("Check out short-form video reviews below."))
+                        .font(.caption)
+                        .foregroundStyle(Palette.inkMuted)
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity)
+                .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Palette.hairline, lineWidth: 1)
+                }
+
+                if !clips.isEmpty {
+                    playerSection
+                    if clips.count > 1 {
+                        clipStrip
+                    }
+                }
+            } else {
+                VStack(spacing: 12) {
+                    ForEach(reviews) { item in
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(alignment: .center, spacing: 6) {
+                                Text(item.author)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(Palette.ink)
+
+                                Text("· \(item.source)")
+                                    .font(.caption2.weight(.medium))
+                                    .foregroundStyle(Brand.rausch)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Brand.rausch.opacity(0.1), in: Capsule())
+
+                                Spacer()
+
+                                HStack(spacing: 2) {
+                                    ForEach(1...5, id: \.self) { star in
+                                        Image(systemName: star <= item.rating ? "star.fill" : "star")
+                                            .font(.caption2)
+                                            .foregroundStyle(star <= item.rating ? Color.orange : Palette.inkFaint)
+                                    }
+                                }
+                            }
+
+                            Text(item.comment)
+                                .font(.subheadline)
+                                .foregroundStyle(Palette.ink)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            HStack {
+                                Spacer()
+                                Text(item.timeAgo)
+                                    .font(.caption2)
+                                    .foregroundStyle(Palette.inkMuted)
+                            }
+                        }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(Palette.hairline, lineWidth: 1)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private var tipsView: some View {
         let tips = PlaceTipsService.tips(for: place)
         return VStack(alignment: .leading, spacing: 14) {
@@ -730,13 +838,37 @@ struct VibeCheckSheet: View {
     }
 
     private func loadClips() async {
-        if (currentAngleLabel == "Must-order" && place.category == .food && PopularDishesService.hasItems(for: place.id))
-            || (currentAngleLabel == "Tips" && PlaceTipsService.hasTips(for: place.id)) {
+        if currentAngleLabel == "Must-order" && place.category == .food {
             isLoading = false
             clips = []
+            reviews = []
+            return
+        }
+        if currentAngleLabel == "Tips" && PlaceTipsService.hasTips(for: place.id) {
+            isLoading = false
+            clips = []
+            reviews = []
+            return
+        }
+        if currentAngleLabel == "Honest review" {
+            isLoading = true
+            let fetchedReviews = await PlaceReviewsService.fetchReviews(for: place)
+            let found = await PlaceShorts.fetchLiveVibeShorts(
+                for: place,
+                in: city,
+                angleSuffix: currentSuffix
+            )
+            guard !Task.isCancelled else { return }
+            reviews = fetchedReviews
+            clips = found
+            selectedClipIndex = 0
+            playback = PlaceVideoPlayback()
+            attempt = UUID()
+            isLoading = false
             return
         }
         isLoading = true
+        reviews = []
         let found = await PlaceShorts.fetchLiveVibeShorts(
             for: place,
             in: city,

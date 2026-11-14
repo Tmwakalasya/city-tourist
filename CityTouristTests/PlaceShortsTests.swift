@@ -33,6 +33,65 @@ struct PlaceShortsTests {
         #expect(PlaceShorts.instagramURL(for: place)?.absoluteString
                 == "https://www.instagram.com/explore/tags/belemtower/")
     }
+
+    @Test func popularDishesGenerationForFoodVenues() throws {
+        // 1. Curated venue
+        let belem = try #require(SampleData.place(id: "lis-pasteis-belem"))
+        let belemItems = PopularDishesService.popularItems(for: belem)
+        #expect(belemItems.count == 5)
+        #expect(belemItems.contains { $0.name == "Pastel de Belém" })
+
+        // 2. Dynamic generation for arbitrary food places
+        let ramenPlace = Place(
+            id: "tok-ichiran",
+            name: "Ichiran Ramen",
+            cityID: "tokyo",
+            category: .food,
+            neighborhood: "Shibuya",
+            rating: 4.6,
+            reviewCount: 5200,
+            priceLevel: 2,
+            typicalMinutes: 45,
+            blurb: "Classic tonkotsu ramen counter",
+            about: "Solo dining booths with customizable tonkotsu broth and thin noodles.",
+            coordinate: Coordinate(latitude: 35.6580, longitude: 139.7016),
+            tags: ["Ramen", "Noodles", "Late Night"]
+        )
+        let ramenDishes = PopularDishesService.popularItems(for: ramenPlace)
+        #expect(ramenDishes.count == 5)
+        #expect(ramenDishes.first?.name.contains("Ramen") == true)
+
+        let tacoPlace = Place(
+            id: "cdmx-taqueria",
+            name: "El Huequito",
+            cityID: "mexico-city",
+            category: .food,
+            neighborhood: "Centro",
+            rating: 4.5,
+            reviewCount: 3100,
+            priceLevel: 1,
+            typicalMinutes: 30,
+            blurb: "Historic taquería serving pastor",
+            about: "Famous for tacos al pastor and fresh guacamole.",
+            coordinate: Coordinate(latitude: 19.4326, longitude: -99.1332),
+            tags: ["Tacos", "Taqueria", "Street Food"]
+        )
+        let tacoDishes = PopularDishesService.popularItems(for: tacoPlace)
+        #expect(tacoDishes.count == 5)
+        #expect(tacoDishes.contains { $0.name.contains("Pastor") })
+
+        // 3. Non-food places return empty
+        let tower = try #require(SampleData.place(id: "lis-belem-tower"))
+        #expect(PopularDishesService.popularItems(for: tower).isEmpty)
+    }
+
+    @Test func realReviewsForSampleVenues() async throws {
+        let belem = try #require(SampleData.place(id: "lis-pasteis-belem"))
+        let reviews = await PlaceReviewsService.fetchReviews(for: belem)
+        #expect(!reviews.isEmpty)
+        #expect(reviews.allSatisfy { $0.rating >= 4 })
+        #expect(reviews.allSatisfy { !$0.author.isEmpty && !$0.comment.isEmpty })
+    }
 }
 
 /// YouTube's two calls, against the shared stub; see `PlacesAPITests`.

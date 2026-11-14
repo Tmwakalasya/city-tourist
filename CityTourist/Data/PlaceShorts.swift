@@ -115,7 +115,7 @@ final class PlaceShorts {
             var angles: [(label: String, suffix: String)] = [
                 ("Vibe check", "food review")
             ]
-            if PopularDishesService.hasItems(for: place.id) {
+            if PopularDishesService.hasItems(for: place) {
                 angles.append(("Must-order", "popular items on the menu"))
             }
             angles.append(("Honest review", "worth it review"))
