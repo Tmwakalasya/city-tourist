@@ -79,7 +79,31 @@ struct PlaceShortsTests {
         let timeout = try #require(SampleData.place(id: "lis-timeout"))
         #expect(PopularDishesService.venueKind(for: timeout) == .culinaryHub)
 
-        // 4. Vibe angles include Must-order for food, bars, and culinary places
+        // 4. Live / Google Places dining venues (e.g. Hygge Kaffe)
+        let hyggeKaffe = Place(
+            id: "lis-hygge-kaffe",
+            name: "Hygge Kaffe",
+            cityID: "lisbon",
+            category: .food,
+            neighborhood: "Saldanha",
+            rating: 4.6,
+            reviewCount: 840,
+            priceLevel: 2,
+            typicalMinutes: 45,
+            blurb: "Nordic specialty coffee & brunch cafe",
+            about: "Danish inspired cozy cafe serving flat whites and cinnamon buns.",
+            coordinate: Coordinate(latitude: 38.7330, longitude: -9.1480),
+            tags: ["Coffee", "Cafe", "Brunch"]
+        )
+        #expect(PopularDishesService.hasItems(for: hyggeKaffe))
+        let hyggeAngles = PlaceShorts.vibeAngles(for: hyggeKaffe)
+        #expect(hyggeAngles.contains { $0.label == "Must-order" })
+        let hyggeItems = PopularDishesService.popularItems(for: hyggeKaffe)
+        #expect(hyggeItems.count == 5)
+        #expect(hyggeItems.contains { $0.name.contains("Cinnamon") && $0.imageURL != nil })
+        #expect(PopularDishesService.venueKind(for: hyggeKaffe) == .restaurantCafe)
+
+        // 5. Vibe angles include Must-order for food, bars, and culinary places
         let belemAngles = PlaceShorts.vibeAngles(for: belem)
         #expect(belemAngles.contains { $0.label == "Must-order" })
 
@@ -89,7 +113,7 @@ struct PlaceShortsTests {
         let gionAngles = PlaceShorts.vibeAngles(for: gion)
         #expect(gionAngles.contains { $0.label == "Must-order" })
 
-        // 5. Non-menu venues return empty and do not have Must-order
+        // 6. Non-menu venues return empty and do not have Must-order
         let tower = try #require(SampleData.place(id: "lis-belem-tower"))
         #expect(PopularDishesService.popularItems(for: tower).isEmpty)
         #expect(!PopularDishesService.hasItems(for: tower))

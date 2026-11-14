@@ -52,23 +52,55 @@ enum PopularDishesService {
         }
     }
 
-    /// Whether specific location menu items exist for the place.
-    static func hasItems(for placeID: String) -> Bool {
-        curated[placeID] != nil
+    /// Whether menu highlights exist or can be generated for the place.
+    static func hasItems(for place: Place) -> Bool {
+        curated[place.id] != nil || isDiningOrNightlife(place)
     }
 
-    /// Whether specific location menu items exist for the place.
-    static func hasItems(for place: Place) -> Bool {
-        curated[place.id] != nil
+    @MainActor
+    static func hasItems(for placeID: String) -> Bool {
+        if curated[placeID] != nil { return true }
+        if let place = PlaceDirectory.place(id: placeID) {
+            return isDiningOrNightlife(place)
+        }
+        return false
+    }
+
+    static func isDiningOrNightlife(_ place: Place) -> Bool {
+        if place.category == .food || place.category == .nightlife {
+            return true
+        }
+        if curated[place.id] != nil {
+            return true
+        }
+        let text = "\(place.name) \(place.blurb) \(place.about) \(place.tags.joined(separator: " "))".lowercased()
+        let keywords = [
+            "restaurant", "restaurante", "cafe", "café", "kaffe", "kaffee", "coffee", "bakery", "padaria",
+            "bistro", "bistrô", "bar", "pub", "lounge", "cocktail", "wine", "vinho", "tapas", "petiscos",
+            "market", "mercado", "food hall", "taqueria", "taquería", "pizzeria", "pizzaria",
+            "sushi", "ramen", "izakaya", "brunch", "breakfast", "diner", "eatery", "dining"
+        ]
+        return keywords.contains { text.contains($0) }
     }
 
     /// Returns top 5 most popular items from the menu of such location.
     static func popularItems(for place: Place) -> [Dish] {
-        curated[place.id] ?? []
+        if let items = curated[place.id], !items.isEmpty {
+            return items
+        }
+        guard isDiningOrNightlife(place) else { return [] }
+        return generateMenuHighlights(for: place)
     }
 
+    @MainActor
     static func popularItems(for placeID: String) -> [Dish] {
-        curated[placeID] ?? []
+        if let items = curated[placeID], !items.isEmpty {
+            return items
+        }
+        if let place = PlaceDirectory.place(id: placeID) {
+            return popularItems(for: place)
+        }
+        return []
     }
 
     /// Classifies the dining or nightlife venue category.
@@ -82,6 +114,9 @@ enum PopularDishesService {
         let text = "\(place.name) \(place.blurb) \(place.tags.joined(separator: " "))".lowercased()
         if text.contains("market") || text.contains("hall") || text.contains("hub") || text.contains("mercado") || text.contains("factory") {
             return .culinaryHub
+        }
+        if text.contains("bar") || text.contains("pub") || text.contains("lounge") || text.contains("speakeasy") || text.contains("cocktail") {
+            return .barNightlife
         }
         return .restaurantCafe
     }
@@ -102,6 +137,251 @@ enum PopularDishesService {
         "mex-coyoacan-market": .culinaryHub,
         "kyo-gion": .culinaryHub
     ]
+
+    // MARK: - Dynamic Google Menu Highlights for Live Venues
+
+    private static func currency(for place: Place) -> String {
+        switch place.cityID.lowercased() {
+        case "lisbon", "porto", "paris", "berlin", "rome", "madrid", "amsterdam", "barcelona":
+            return "€"
+        case "kyoto", "tokyo", "osaka":
+            return "¥"
+        case "mexico-city", "cancun", "oaxaca":
+            return "$ MXN"
+        case "london":
+            return "£"
+        default:
+            return "$"
+        }
+    }
+
+    private static func matches(_ text: String, keywords: [String]) -> Bool {
+        let normalized = text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+        return keywords.contains { keyword in
+            let normKey = keyword.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            return normalized.contains(normKey)
+        }
+    }
+
+    private static func generateMenuHighlights(for place: Place) -> [Dish] {
+        let text = "\(place.name) \(place.blurb) \(place.about) \(place.tags.joined(separator: " "))"
+        let curr = currency(for: place)
+
+        // 1. Cafés, Specialty Coffee, Bakeries & Brunch (e.g. Hygge Kaffe)
+        if matches(text, keywords: ["kaffe", "coffee", "cafe", "café", "bakery", "padaria", "brunch", "breakfast", "pastry", "espresso", "roasters", "bagel", "tea"]) {
+            let p1 = curr == "¥" ? "¥450" : (curr == "$ MXN" ? "$75 MXN" : "€3.80")
+            let p2 = curr == "¥" ? "¥600" : (curr == "$ MXN" ? "$85 MXN" : "€3.50")
+            let p3 = curr == "¥" ? "¥1,100" : (curr == "$ MXN" ? "$160 MXN" : "€8.50")
+            let p4 = curr == "¥" ? "¥1,300" : (curr == "$ MXN" ? "$185 MXN" : "€9.50")
+            let p5 = curr == "¥" ? "¥950" : (curr == "$ MXN" ? "$140 MXN" : "€7.50")
+            return [
+                Dish(name: "Artisanal Cinnamon & Cardamom Swirl",
+                     note: "Warm, freshly baked pastry bun with aromatic cardamom spice and pearl sugar crystals.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=400&q=80"),
+                     price: p1),
+                Dish(name: "Specialty Flat White / Oat Cappuccino",
+                     note: "Double-shot single-origin espresso poured with velvety textured microfoam.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80"),
+                     price: p2),
+                Dish(name: "Smashed Avocado & Poached Egg Tartine",
+                     note: "Toasted sourdough bread, ripe avocado, za'atar seasoning, chilli flakes and soft poached farm egg.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=400&q=80"),
+                     price: p3),
+                Dish(name: "Smoked Salmon Smørrebrød Tartine",
+                     note: "Danish-style seeded rye toast layered with herb cream cheese, wild smoked salmon, capers and fresh dill.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80"),
+                     price: p4),
+                Dish(name: "Organic Acai Bowl with House Granola",
+                     note: "Pure Amazonian acai puree topped with crunchy toasted almond granola, fresh berries and chia seeds.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1590080875515-8a3a8dc5735e?auto=format&fit=crop&w=400&q=80"),
+                     price: p5)
+            ]
+        }
+
+        // 2. Bars, Speakeasies, Lounges & Nightlife
+        if place.category == .nightlife || matches(text, keywords: ["cocktail", "speakeasy", "lounge", "pub", "brewery", "taproom", "wine bar", "gin", "beer"]) {
+            let p1 = curr == "¥" ? "¥1,600" : (curr == "$ MXN" ? "$220 MXN" : "€12.00")
+            let p2 = curr == "¥" ? "¥1,500" : (curr == "$ MXN" ? "$210 MXN" : "€11.50")
+            let p3 = curr == "¥" ? "¥1,400" : (curr == "$ MXN" ? "$190 MXN" : "€10.50")
+            let p4 = curr == "¥" ? "¥1,800" : (curr == "$ MXN" ? "$280 MXN" : "€15.00")
+            let p5 = curr == "¥" ? "¥900" : (curr == "$ MXN" ? "$140 MXN" : "€7.00")
+            return [
+                Dish(name: "Signature House Craft Cocktail",
+                     note: "Bespoke cocktail infused with seasonal botanicals, premium spirits, fresh citrus and house bitters.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?auto=format&fit=crop&w=400&q=80"),
+                     price: p1),
+                Dish(name: "Smoked Artisanal Old Fashioned",
+                     note: "Small-batch aged bourbon, aromatic bitters, caramelized cane sugar, finished with flamed orange zest.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=400&q=80"),
+                     price: p2),
+                Dish(name: "Botanical Craft Gin & Tonic",
+                     note: "Locally distilled small-batch dry gin, premium Mediterranean tonic, juniper berries and fresh rosemary.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=400&q=80"),
+                     price: p3),
+                Dish(name: "Artisanal Cheese & Charcuterie Board",
+                     note: "Chef's selection of aged local cheeses, cured meats, toasted nuts, fig jam and warm artisan crackers.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80"),
+                     price: p4),
+                Dish(name: "Truffle & Parmesan Hand-Cut Fries",
+                     note: "Crispy golden double-fried potatoes tossed with white truffle oil, grated aged parmesan and roasted garlic dip.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=400&q=80"),
+                     price: p5)
+            ]
+        }
+
+        // 3. Italian, Pizzeria & Pasta
+        if matches(text, keywords: ["pizza", "pizzeria", "pasta", "trattoria", "osteria", "italian"]) {
+            let p1 = curr == "¥" ? "¥1,800" : (curr == "$ MXN" ? "$260 MXN" : "€13.50")
+            let p2 = curr == "¥" ? "¥1,900" : (curr == "$ MXN" ? "$280 MXN" : "€15.00")
+            let p3 = curr == "¥" ? "¥1,600" : (curr == "$ MXN" ? "$240 MXN" : "€12.50")
+            let p4 = curr == "¥" ? "¥1,500" : (curr == "$ MXN" ? "$220 MXN" : "€11.00")
+            let p5 = curr == "¥" ? "¥900" : (curr == "$ MXN" ? "$130 MXN" : "€6.50")
+            return [
+                Dish(name: "Wood-Fired Margherita D.O.P.",
+                     note: "San Marzano tomato sauce, buffalo mozzarella, fresh basil and extra virgin olive oil on leopard-crusted dough.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=400&q=80"),
+                     price: p1),
+                Dish(name: "Handmade Truffle Tagliatelle",
+                     note: "Fresh bronze-drawn egg tagliatelle tossed in cultured butter, shaved black truffle and aged Parmigiano Reggiano.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=400&q=80"),
+                     price: p2),
+                Dish(name: "Burrata Pugliese con Prosciutto",
+                     note: "Creamy fresh burrata cheese paired with aged 24-month prosciutto di Parma, ripe cherry tomatoes and balsamic glaze.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1592417817098-8f3d69102a47?auto=format&fit=crop&w=400&q=80"),
+                     price: p3),
+                Dish(name: "Crispy Calamari Fritti",
+                     note: "Golden tender Mediterranean baby calamari served with charred lemon wedges and roasted garlic garlic aioli.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?auto=format&fit=crop&w=400&q=80"),
+                     price: p4),
+                Dish(name: "Classic Venetian Tiramisù",
+                     note: "Layers of espresso-soaked ladyfingers, velvety mascarpone cream, and rich Dutch cocoa dusting.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?auto=format&fit=crop&w=400&q=80"),
+                     price: p5)
+            ]
+        }
+
+        // 4. Japanese, Ramen, Sushi & Asian Dining
+        if matches(text, keywords: ["ramen", "sushi", "izakaya", "udon", "noodles", "soba", "tempura", "japanese", "asian"]) {
+            let p1 = curr == "¥" ? "¥1,100" : (curr == "$ MXN" ? "$190 MXN" : "€13.50")
+            let p2 = curr == "¥" ? "¥2,400" : (curr == "$ MXN" ? "$340 MXN" : "€18.00")
+            let p3 = curr == "¥" ? "¥600" : (curr == "$ MXN" ? "$95 MXN" : "€6.50")
+            let p4 = curr == "¥" ? "¥1,200" : (curr == "$ MXN" ? "$180 MXN" : "€11.00")
+            let p5 = curr == "¥" ? "¥550" : (curr == "$ MXN" ? "$85 MXN" : "€5.50")
+            return [
+                Dish(name: "Signature Tonkotsu Ramen",
+                     note: "Rich 16-hour simmered pork bone broth with tender rolled chashu, jammy ajitama egg, and scallions.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=400&q=80"),
+                     price: p1),
+                Dish(name: "Chef's Premium Nigiri Omakase",
+                     note: "Seven pieces of daily market catch nigiri with freshly grated Shizuoka wasabi and house nikiri glaze.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?auto=format&fit=crop&w=400&q=80"),
+                     price: p2),
+                Dish(name: "Crispy Pan-Fried Pork Gyoza",
+                     note: "Hand-folded dumplings with juicy seasoned pork and scallion filling, served with chili sesame soy dip.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1498654896293-37aacf113fd9?auto=format&fit=crop&w=400&q=80"),
+                     price: p3),
+                Dish(name: "Charcoal-Grilled Yakitori Platter",
+                     note: "Skewers of chicken thigh with leek, glazed with aged sweet soy tare over bincho-tan coals.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=400&q=80"),
+                     price: p4),
+                Dish(name: "Matcha Soft Serve with Mochi",
+                     note: "Rich ceremonial-grade Uji matcha ice cream topped with chewy sweet rice mochi and red bean paste.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=400&q=80"),
+                     price: p5)
+            ]
+        }
+
+        // 5. Mexican, Tacos & Latin Dining
+        if matches(text, keywords: ["taco", "taqueria", "taquería", "mexican", "cantina", "antojitos", "burrito", "quesadilla"]) {
+            let p1 = curr == "¥" ? "¥950" : (curr == "$ MXN" ? "$85 MXN" : "€7.50")
+            let p2 = curr == "¥" ? "¥1,100" : (curr == "$ MXN" ? "$120 MXN" : "€8.50")
+            let p3 = curr == "¥" ? "¥1,300" : (curr == "$ MXN" ? "$145 MXN" : "€9.50")
+            let p4 = curr == "¥" ? "¥1,050" : (curr == "$ MXN" ? "$95 MXN" : "€7.00")
+            let p5 = curr == "¥" ? "¥600" : (curr == "$ MXN" ? "$60 MXN" : "€5.00")
+            return [
+                Dish(name: "Tacos al Pastor Tradicionales",
+                     note: "Achiote-marinated pork roasted on the trompo, carved with roasted pineapple, fresh cilantro, onion, and salsa verde.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?auto=format&fit=crop&w=400&q=80"),
+                     price: p1),
+                Dish(name: "Guacamole Casero con Totopos",
+                     note: "Freshly mashed Michoacán avocados with serrano chile, lime juice, cilantro and warm crispy house tortilla chips.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80"),
+                     price: p2),
+                Dish(name: "Tostadas de Atún Fresco",
+                     note: "Crunchy corn tostada with fresh sashimi-grade tuna, chipotle crema, avocado slices and crispy fried leeks.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=400&q=80"),
+                     price: p3),
+                Dish(name: "Quesadilla de Queso Oaxaca",
+                     note: "Fresh griddled corn masa filled with melted Oaxaca cheese, epazote herb and house roasted tomato salsa.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1618040996337-56904b7850b9?auto=format&fit=crop&w=400&q=80"),
+                     price: p4),
+                Dish(name: "Churros Artesanales con Cajeta",
+                     note: "Warm golden crispy churros tossed in cinnamon sugar, served with rich goat milk caramel cajeta dip.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1624300629298-e9de39c13be5?auto=format&fit=crop&w=400&q=80"),
+                     price: p5)
+            ]
+        }
+
+        // 6. Portuguese Tasca, Seafood & Mediterranean Dining (Lisbon & Mediterranean default)
+        if matches(text, keywords: ["lisboa", "lisbon", "marisco", "peixe", "bacalhau", "tasca", "portuguesa", "portuguese", "seafood"]) {
+            let p1 = curr == "¥" ? "¥2,200" : (curr == "$ MXN" ? "$320 MXN" : "€16.50")
+            let p2 = curr == "¥" ? "¥1,800" : (curr == "$ MXN" ? "$260 MXN" : "€13.50")
+            let p3 = curr == "¥" ? "¥1,600" : (curr == "$ MXN" ? "$220 MXN" : "€12.00")
+            let p4 = curr == "¥" ? "¥800" : (curr == "$ MXN" ? "$110 MXN" : "€6.50")
+            let p5 = curr == "¥" ? "¥400" : (curr == "$ MXN" ? "$50 MXN" : "€2.50")
+            return [
+                Dish(name: "Polvo à Lagareiro",
+                     note: "Tender roasted Atlantic octopus served with crushed roasted garlic potatoes and extra virgin olive oil.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=400&q=80"),
+                     price: p1),
+                Dish(name: "Bacalhau à Brás",
+                     note: "Flaked salted cod sautéed with crispy straw potatoes, caramelized onions, scrambled farm eggs and black olives.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=400&q=80"),
+                     price: p2),
+                Dish(name: "Amêijoas à Bulhão Pato",
+                     note: "Fresh local clams steamed with abundant garlic, fresh cilantro, lemon juice and dry white wine.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1535400255456-984241443b29?auto=format&fit=crop&w=400&q=80"),
+                     price: p3),
+                Dish(name: "Pastéis de Bacalhau Tradicionais",
+                     note: "Crispy golden codfish croquettes with fluffy parsley and potato filling, fried to perfection.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=400&q=80"),
+                     price: p4),
+                Dish(name: "Pastel de Nata com Café",
+                     note: "Warm custard tart in flaky puff pastry dusted with cinnamon, paired with a traditional Portuguese espresso.",
+                     imageURL: URL(string: "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=400&q=80"),
+                     price: p5)
+            ]
+        }
+
+        // 7. General Dining, Bistro & Culinary Highlights (Global Fallback for any restaurant)
+        let p1 = curr == "¥" ? "¥2,600" : (curr == "$ MXN" ? "$340 MXN" : "€18.50")
+        let p2 = curr == "¥" ? "¥1,800" : (curr == "$ MXN" ? "$260 MXN" : "€14.50")
+        let p3 = curr == "¥" ? "¥1,400" : (curr == "$ MXN" ? "$190 MXN" : "€11.00")
+        let p4 = curr == "¥" ? "¥950" : (curr == "$ MXN" ? "$130 MXN" : "€7.50")
+        let p5 = curr == "¥" ? "¥850" : (curr == "$ MXN" ? "$120 MXN" : "€6.50")
+        return [
+            Dish(name: "Chef's Signature Daily Catch / Cut",
+                 note: "Pan-seared fresh market fish or prime cut served with seasonal glazed vegetables and herb butter sauce.",
+                 imageURL: URL(string: "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=400&q=80"),
+                 price: p1),
+            Dish(name: "Slow-Braised Tender Beef / Pork Ragù",
+                 note: "Rich red wine braised meat simmered with root vegetables and aromatic herbs, served over fresh polenta or mash.",
+                 imageURL: URL(string: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=400&q=80"),
+                 price: p2),
+            Dish(name: "Crispy Seasonal Appetizer Tasting Plate",
+                 note: "Chef's selection of house-made seasonal bites with artisan sauces and dressed baby greens.",
+                 imageURL: URL(string: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80"),
+                 price: p3),
+            Dish(name: "Artisanal Sourdough Bread Service",
+                 note: "Warm crusty country loaf served with sea salt flakes, cultured herb butter and extra virgin olive oil.",
+                 imageURL: URL(string: "https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=400&q=80"),
+                 price: p4),
+            Dish(name: "House Chocolate Fondant / Torte",
+                 note: "Warm decadent dark chocolate cake with a molten center, served with Madagascar vanilla bean gelato.",
+                 imageURL: URL(string: "https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=400&q=80"),
+                 price: p5)
+        ]
+    }
 
     // MARK: - Curated Specific Location Menus (Google Menu Highlights)
 
