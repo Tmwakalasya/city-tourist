@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TripsView: View {
     @Environment(AppStore.self) private var store
+    @AppStorage("settings.confirmBeforeDeleting") private var confirmBeforeDeleting = true
     @State private var isCreating = false
     @State private var tripToDelete: Trip?
     @State private var isClearingPast = false
@@ -80,7 +81,13 @@ struct TripsView: View {
                     }
                 }
                 section("Upcoming", trips: store.upcomingTrips)
-                section("Past trips", trips: store.pastTrips) { isClearingPast = true }
+                section("Past trips", trips: store.pastTrips) {
+                    if confirmBeforeDeleting {
+                        isClearingPast = true
+                    } else {
+                        store.deleteTrips(Set(store.pastTrips.map(\.id)))
+                    }
+                }
             }
             .padding(.horizontal, Metric.gutter)
             .padding(.top, 8)
@@ -112,7 +119,11 @@ struct TripsView: View {
                     .buttonStyle(.plain)
                     .contextMenu {
                         Button("Delete trip", systemImage: "trash", role: .destructive) {
-                            tripToDelete = trip
+                            if confirmBeforeDeleting {
+                                tripToDelete = trip
+                            } else {
+                                store.deleteTrip(trip)
+                            }
                         }
                     }
                 }

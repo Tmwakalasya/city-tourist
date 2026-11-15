@@ -13,6 +13,8 @@ struct TripDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    @AppStorage("settings.confirmBeforeDeleting") private var confirmBeforeDeleting = true
+
     @State private var dayIndex = 0
     @State private var editingStop: ItineraryStop?
     @State private var isReordering = false
@@ -47,7 +49,11 @@ struct TripDetailView: View {
                 Button("Share trip", systemImage: "square.and.arrow.up") { isSharing = true }
                 Menu("More", systemImage: "ellipsis") {
                     Button("Delete trip", systemImage: "trash", role: .destructive) {
-                        isConfirmingDelete = true
+                        if confirmBeforeDeleting {
+                            isConfirmingDelete = true
+                        } else {
+                            deleteCurrentTrip()
+                        }
                     }
                 }
             }
@@ -83,9 +89,7 @@ struct TripDetailView: View {
         .confirmationDialog("Delete \(trip?.title ?? "this trip")?", isPresented: $isConfirmingDelete,
                             titleVisibility: .visible) {
             Button("Delete trip", role: .destructive) {
-                guard let trip else { return }
-                dismiss()
-                store.deleteTrip(trip)
+                deleteCurrentTrip()
             }
         } message: {
             Text("Its stops and reminders go with it. This can't be undone.")
@@ -108,6 +112,12 @@ struct TripDetailView: View {
             let day = trip.days[dayIndex]
             await routes.loadLegs(for: day.stops, on: day.date, by: trip.gettingAround)
         }
+    }
+
+    private func deleteCurrentTrip() {
+        guard let trip else { return }
+        dismiss()
+        store.deleteTrip(trip)
     }
 
     /// The day's resolved places, in timeline order, and how the trip gets
@@ -810,3 +820,4 @@ private extension View {
             .padding(.bottom, 14)
     }
 }
+
