@@ -27,6 +27,13 @@ struct CityTouristApp: App {
                 Color.clear
             } else {
                 RootTabView()
+                    .environment(\.openURL, OpenURLAction { url in
+                        if AppSettings.isOpenInSafariOrChrome && ["http", "https"].contains(url.scheme?.lowercased()) {
+                            BrowserOpener.open(url)
+                            return .handled
+                        }
+                        return .systemAction
+                    })
                     .environment(\.locale, store.profile.language.locale)
                     .environment(authentication)
                     .environment(avatar)

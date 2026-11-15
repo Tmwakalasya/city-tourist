@@ -3,13 +3,19 @@ import SwiftUI
 struct PhoneSignInView: View {
     @Environment(AuthenticationStore.self) private var auth
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("auth.lastDialCode") private var lastDialCode = PhoneCountry.supported[0].dialCode
-    @State private var country = PhoneCountry.supported[0]
+    @AppStorage(AppSettings.lastDialCode) private var lastDialCode = PhoneCountry.supported[0].dialCode
+    @State private var country: PhoneCountry
     @State private var number = ""
     @State private var code = ""
     @FocusState private var focusedField: Field?
 
     private enum Field { case phone, code }
+
+    init() {
+        let saved = UserDefaults.standard.string(forKey: AppSettings.lastDialCode)
+        let initialCountry = PhoneCountry.supported.first(where: { $0.dialCode == saved }) ?? PhoneCountry.supported[0]
+        _country = State(initialValue: initialCountry)
+    }
 
     var body: some View {
         NavigationStack {
@@ -30,7 +36,10 @@ struct PhoneSignInView: View {
                             .keyboardType(.phonePad)
                             .textContentType(.telephoneNumber)
                             .focused($focusedField, equals: .phone)
-                            .onChange(of: number) { _, value in number = country.masked(value) }
+                            .onChange(of: number) { _, value in
+                                let masked = country.masked(value)
+                                if number != masked { number = masked }
+                            }
 
                         TimelineView(.periodic(from: .now, by: 1)) { context in
                             let seconds = auth.remaining(at: context.date)
@@ -52,7 +61,7 @@ struct PhoneSignInView: View {
                             .focused($focusedField, equals: .code)
                             .onChange(of: code) { _, value in
                                 let sanitized = String(value.filter { $0.isASCII && $0.isNumber }.prefix(6))
-                                code = sanitized
+                                if code != sanitized { code = sanitized }
                                 if sanitized.count == 6 && !auth.busy {
                                     Task { await auth.verify(code: sanitized) }
                                 }
@@ -85,9 +94,6 @@ struct PhoneSignInView: View {
             .navigationTitle("Phone sign-in")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
             .onAppear {
-                if let saved = PhoneCountry.supported.first(where: { $0.dialCode == lastDialCode }) {
-                    country = saved
-                }
                 focusedField = auth.pendingPhone == nil ? .phone : .code
             }
             .onChange(of: auth.pendingPhone) { _, pending in

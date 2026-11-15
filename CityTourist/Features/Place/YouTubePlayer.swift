@@ -48,12 +48,12 @@ struct YouTubePlayer: UIViewRepresentable {
     let playback: PlaceVideoPlayback
     var isActive: Bool
 
-    @AppStorage("settings.lowDataMode") private var lowDataMode = false
+    @AppStorage(AppSettings.autoplayVideos) private var autoplayVideos = false
 
     func makeCoordinator() -> Coordinator { Coordinator(playback: playback) }
 
     func makeUIView(context: Context) -> WKWebView {
-        let shouldAutoplay = isActive && !lowDataMode
+        let shouldAutoplay = isActive && autoplayVideos
         let configuration = WKWebViewConfiguration()
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = shouldAutoplay ? [] : .all
@@ -73,7 +73,9 @@ struct YouTubePlayer: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.playback = playback
-        if !isActive { webView.evaluateJavaScript("window.pauseVideo && window.pauseVideo();", completionHandler: nil) }
+        if !isActive || !autoplayVideos {
+            webView.evaluateJavaScript("window.pauseVideo && window.pauseVideo();", completionHandler: nil)
+        }
         // Returning to the app never starts a video on the user's behalf.
     }
 
@@ -98,7 +100,7 @@ struct YouTubePlayer: UIViewRepresentable {
             "playerVars": ["autoplay": autoplay ? 1 : 0, "controls": 1, "playsinline": 1,
                            "rel": 0, "origin": origin.absoluteString]
         ]
-        let data = try! JSONSerialization.data(withJSONObject: options, options: [.sortedKeys])
+        let data = (try? JSONSerialization.data(withJSONObject: options, options: [.sortedKeys])) ?? Data("{}".utf8)
         let json = String(decoding: data, as: UTF8.self)
         return """
         <!doctype html><html><head>

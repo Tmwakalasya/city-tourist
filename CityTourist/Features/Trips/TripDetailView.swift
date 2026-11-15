@@ -13,7 +13,7 @@ struct TripDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    @AppStorage("settings.confirmBeforeDeleting") private var confirmBeforeDeleting = true
+    @AppStorage(AppSettings.confirmBeforeDeleting) private var confirmBeforeDeleting = true
 
     @State private var dayIndex = 0
     @State private var editingStop: ItineraryStop?

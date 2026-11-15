@@ -14,9 +14,10 @@ struct ProfileView: View {
     @Environment(\.openURL) private var openURL
     @State private var copiedFeedbackAddress = false
 
-    @AppStorage("settings.lowDataMode") private var lowDataMode = false
-    @AppStorage("settings.openLinksInSafari") private var openLinksInSafari = false
-    @AppStorage("settings.confirmBeforeDeleting") private var confirmBeforeDeleting = true
+    @AppStorage(AppSettings.autoplayVideos) private var autoplayVideos = false
+    @AppStorage(AppSettings.confirmBeforeDeleting) private var confirmBeforeDeleting = true
+    @AppStorage(AppSettings.postTripSurveyPrompts) private var surveyPromptsEnabled = true
+    @AppStorage(AppSettings.openInSafariOrChrome) private var openInSafariOrChrome = false
 
     var body: some View {
         NavigationStack {
@@ -165,9 +166,10 @@ struct ProfileView: View {
                 }
             }
 
-            toggleRow("Low data mode", subtitle: "(disables autoplay on reels)", symbol: "cellularbars", isOn: $lowDataMode)
-            toggleRow("Open links in Safari", symbol: "safari", isOn: $openLinksInSafari)
+            toggleRow("Autoplay videos", symbol: "play.circle", isOn: $autoplayVideos)
             toggleRow("Confirm before deleting", symbol: "trash", isOn: $confirmBeforeDeleting)
+            toggleRow("Post-trip survey prompts", symbol: "checklist", isOn: $surveyPromptsEnabled)
+            toggleRow("Open in Safari or Chrome", symbol: "safari", isOn: $openInSafariOrChrome)
 
             Text("Account").sectionTitleStyle().padding(.top, 24).padding(.bottom, 8)
             if let session = auth.session {
@@ -188,8 +190,8 @@ struct ProfileView: View {
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("About").sectionTitleStyle().padding(.bottom, 8)
-            row("Beta survey", symbol: "checklist") { openURL(BetaSurvey.url()) }
-            row("Privacy", symbol: "hand.raised") { openURL(Self.privacyURL) }
+            row("Beta survey", symbol: "checklist") { openLink(BetaSurvey.url()) }
+            row("Privacy", symbol: "hand.raised") { openLink(Self.privacyURL) }
             if let feedbackURL, let address = Secrets.feedbackEmail {
                 row("Send feedback", symbol: "bubble.left") {
                     // Without a mail app the link goes nowhere; hand over the address instead.
@@ -209,6 +211,14 @@ struct ProfileView: View {
                     .captionStyle()
             }
             .padding(.top, 16)
+        }
+    }
+
+    private func openLink(_ url: URL) {
+        if openInSafariOrChrome {
+            BrowserOpener.open(url)
+        } else {
+            openURL(url)
         }
     }
 

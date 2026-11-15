@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Kept separate from credentials: legacy state has no profile and decodes to these defaults.
 struct UserProfile: Codable, Equatable {
@@ -93,6 +94,46 @@ enum DistanceFormatting {
 extension Coordinate {
     var isValid: Bool {
         latitude.isFinite && longitude.isFinite && (-90...90).contains(latitude) && (-180...180).contains(longitude)
+    }
+}
+
+/// Centralized storage keys for user preferences and feature flags.
+enum AppSettings {
+    static let autoplayVideos = "settings.autoplayVideos"
+    static let confirmBeforeDeleting = "settings.confirmBeforeDeleting"
+    static let openInSafariOrChrome = "settings.openInSafariOrChrome"
+    static let postTripSurveyPrompts = BetaSurvey.promptsEnabledKey
+    static let lastDialCode = "auth.lastDialCode"
+
+    static var isOpenInSafariOrChrome: Bool {
+        UserDefaults.standard.bool(forKey: openInSafariOrChrome)
+    }
+}
+
+/// Helper that routes external web links to Google Chrome (if installed) or Safari.
+enum BrowserOpener {
+    static func chromeURL(for url: URL) -> URL? {
+        guard let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) else { return nil }
+        let chromeScheme = scheme == "https" ? "googlechromes" : "googlechrome"
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: true)
+        components?.scheme = chromeScheme
+        return components?.url
+    }
+
+    static func open(_ url: URL) {
+        guard let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) else {
+            UIApplication.shared.open(url)
+            return
+        }
+        if let chrome = chromeURL(for: url) {
+            UIApplication.shared.open(chrome, options: [:]) { success in
+                if !success {
+                    UIApplication.shared.open(url)
+                }
+            }
+        } else {
+            UIApplication.shared.open(url)
+        }
     }
 }
 
