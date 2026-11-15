@@ -152,8 +152,21 @@ Current features and implementation status:
 | Booked stops that re-planning works around | `StopEditorSheet`, `DayPlanner` |
 | What's on: ticketed events near the trip, added as booked stops | `TicketmasterService`, `EventCatalog`, `EventDetailView` |
 | Street-level preview of a place | `LookAroundBlock` |
+| Gemini Audio Tour Guide & local insider insights with voice narration | `GeminiPlaceService`, `GeminiAudioPlayer`, `GeminiPlaceInsightView` |
 
 Out of scope per the brief: bookings, payments, and group chat.
+
+## Gemini Audio Tour Guide & Insider Insights
+
+Every place page features **Gemini Tour Guide** — an AI-powered local companion that brings each destination to life:
+
+- **Listen with Gemini**: Tap to play a spoken 60-second audio guide narrative about the venue, secret history, sensory details, and what locals cherish. Powered by `AVSpeechSynthesizer` with speech progress tracking and animated waveform visuals. Tap **Read story** to reveal the full written transcript.
+- **Hidden Local Detail**: Architectural easter eggs and timing tips tourists walk right past.
+- **Prime Photography Vantage**: Optimal vantage points and golden hour timing for the best shot.
+- **Local Etiquette & Culture**: Cultural norms, ordering advice, and dining customs.
+- **Instant Q&A**: Tap context-aware questions to get immediate, grounded answers from Gemini.
+
+Works out of the box with bundled, curated audio stories for Lisbon, Kyoto, and Mexico City without requiring any API key. With a key (`GeminiAPIKey` in `Secrets.plist` or `GOOGLE_PLACES_API_KEY` with Gemini API enabled), live generative insights are fetched on demand and cached in memory.
 
 ## Weather
 

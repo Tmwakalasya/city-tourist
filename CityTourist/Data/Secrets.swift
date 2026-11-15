@@ -19,6 +19,12 @@ enum Secrets {
 
     static var hasGooglePlacesKey: Bool { googlePlacesAPIKey != nil }
 
+    /// Optional: Gemini API key for AI Tour Guide, audio narratives and insider insights.
+    /// Falls back to the Google Places key when Gemini API is enabled in the same Google Cloud project.
+    static let geminiAPIKey: String? = key("GeminiAPIKey", orEnvironment: "GEMINI_API_KEY") ?? googlePlacesAPIKey
+
+    static var hasGeminiKey: Bool { geminiAPIKey != nil }
+
     /// Optional: short videos on place pages. Without its own entry this is
     /// the Google Places key, which works once YouTube Data API v3 is enabled
     /// for it in the same Google Cloud project.

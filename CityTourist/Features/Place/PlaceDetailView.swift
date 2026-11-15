@@ -34,6 +34,8 @@ struct PlaceDetailView: View {
                         tagsBlock
                     }
                     Hairline()
+                    GeminiPlaceInsightView(place: place)
+                    Hairline()
                     mapBlock
                     if place.event == nil {
                         Hairline()
