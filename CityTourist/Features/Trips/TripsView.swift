@@ -2,6 +2,8 @@ import SwiftUI
 
 struct TripsView: View {
     @Environment(AppStore.self) private var store
+    @AppStorage(AppSettings.confirmBeforeDeleting) private var confirmBeforeDeleting = true
+    @AppStorage(AppSettings.postTripSurveyPrompts) private var surveyPromptsEnabled = true
     @State private var isCreating = false
     @State private var tripToDelete: Trip?
     @State private var isClearingPast = false
@@ -72,7 +74,8 @@ struct TripsView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                if let ended = BetaSurvey.justEnded(store.pastTrips, dismissed: BetaSurvey.decode(surveyDone)) {
+                if surveyPromptsEnabled,
+                   let ended = BetaSurvey.justEnded(store.pastTrips, dismissed: BetaSurvey.decode(surveyDone)) {
                     SurveyCard(trip: ended) {
                         withAnimation {
                             surveyDone = BetaSurvey.encode(BetaSurvey.decode(surveyDone).union([ended.id.uuidString]))
@@ -80,7 +83,9 @@ struct TripsView: View {
                     }
                 }
                 section("Upcoming", trips: store.upcomingTrips)
-                section("Past trips", trips: store.pastTrips) { isClearingPast = true }
+                section("Past trips", trips: store.pastTrips) {
+                    isClearingPast = true
+                }
             }
             .padding(.horizontal, Metric.gutter)
             .padding(.top, 8)
@@ -112,7 +117,13 @@ struct TripsView: View {
                     .buttonStyle(.plain)
                     .contextMenu {
                         Button("Delete trip", systemImage: "trash", role: .destructive) {
-                            tripToDelete = trip
+                            if confirmBeforeDeleting {
+                                tripToDelete = trip
+                            } else {
+                                withAnimation {
+                                    store.deleteTrip(trip)
+                                }
+                            }
                         }
                     }
                 }

@@ -14,6 +14,11 @@ struct ProfileView: View {
     @Environment(\.openURL) private var openURL
     @State private var copiedFeedbackAddress = false
 
+    @AppStorage(AppSettings.autoplayVideos) private var autoplayVideos = false
+    @AppStorage(AppSettings.confirmBeforeDeleting) private var confirmBeforeDeleting = true
+    @AppStorage(AppSettings.postTripSurveyPrompts) private var surveyPromptsEnabled = true
+    @AppStorage(AppSettings.openLinksInChrome) private var openLinksInChrome = false
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -96,6 +101,7 @@ struct ProfileView: View {
         let result = store.profile.displayName.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined()
         return result.isEmpty ? "CT" : result.uppercased()
     }
+
     private var statistics: some View {
         HStack(spacing: 16) {
             statistic(store.savedPlaceIDs.count, title: "Saved places", symbol: "heart", color: Brand.rausch)
@@ -103,6 +109,7 @@ struct ProfileView: View {
                       title: "Days planned", symbol: "calendar", color: Brand.babu)
         }
     }
+
     private func statistic(_ count: Int, title: String, symbol: String, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Image(systemName: symbol).font(.title2).foregroundStyle(color)
@@ -110,6 +117,7 @@ struct ProfileView: View {
             Text(L10n.text(title)).metaStyle()
         }.frame(maxWidth: .infinity, alignment: .leading).padding(20).background(Palette.surface, in: RoundedRectangle(cornerRadius: 20))
     }
+
     private var travelStyle: some View {
         let places = store.trips.flatMap { $0.days.flatMap(\.stops) }.compactMap { PlaceDirectory.place(id: $0.placeID) }
         let categories = Dictionary(grouping: places, by: \.category)
@@ -131,34 +139,59 @@ struct ProfileView: View {
     }
 
     private var settingsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Settings").sectionTitleStyle()
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Settings").sectionTitleStyle().padding(.bottom, 8)
+
             row("Notifications", symbol: "bell") { openNotificationSettings() }
-            Picker("Language", selection: Binding(get: { store.profile.language }, set: { value in
-                var profile = store.profile; profile.language = value; store.updateProfile(profile)
-            })) { ForEach(AppLanguage.allCases) { Text($0.title).tag($0) } }
-            Picker("Distance units", selection: Binding(get: { store.profile.distanceUnit }, set: { value in
-                var profile = store.profile; profile.distanceUnit = value; store.updateProfile(profile)
-            })) { ForEach(DistanceUnit.allCases) { Text($0.title).tag($0) } }
-            Text("Account").sectionTitleStyle().padding(.top, 12)
+
+            pickerRow("Language", symbol: "globe") {
+                Picker(L10n.text("Language"), selection: Binding(
+                    get: { store.profile.language },
+                    set: { value in
+                        var profile = store.profile; profile.language = value; store.updateProfile(profile)
+                    }
+                )) {
+                    ForEach(AppLanguage.allCases) { Text($0.title).tag($0) }
+                }
+            }
+
+            pickerRow("Distance units", symbol: "ruler") {
+                Picker(L10n.text("Distance units"), selection: Binding(
+                    get: { store.profile.distanceUnit },
+                    set: { value in
+                        var profile = store.profile; profile.distanceUnit = value; store.updateProfile(profile)
+                    }
+                )) {
+                    ForEach(DistanceUnit.allCases) { Text($0.title).tag($0) }
+                }
+            }
+
+            toggleRow("Autoplay videos", symbol: "play.circle", isOn: $autoplayVideos)
+            toggleRow("Confirm before deleting", symbol: "trash", isOn: $confirmBeforeDeleting)
+            toggleRow("Post-trip survey prompts", symbol: "checklist", isOn: $surveyPromptsEnabled)
+            toggleRow("Open links in Chrome", symbol: "safari", isOn: $openLinksInChrome)
+
+            Text("Account").sectionTitleStyle().padding(.top, 24).padding(.bottom, 8)
             if let session = auth.session {
                 Text(session.user.phone.map { $0.hasPrefix("+") ? $0 : "+" + $0 } ?? L10n.text("Signed in")).metaStyle()
-                Button("Sign out") { Task { await auth.signOut() } }.disabled(auth.busy)
+                Button("Sign out") { Task { await auth.signOut() } }
+                    .disabled(auth.busy)
+                    .padding(.top, 8)
             } else if auth.isConfigured {
                 row("Sign in with phone", symbol: "phone") { signingIn = true }
             } else {
                 Text("Phone sign-in is not configured yet.").captionStyle()
             }
-            Text("Trips and saved places stay on this device.").captionStyle()
-            if let error = auth.errorMessage { Text(error).captionStyle().foregroundStyle(Brand.rausch) }
+            Text("Trips and saved places stay on this device.").captionStyle().padding(.top, 8)
+            if let error = auth.errorMessage { Text(error).captionStyle().foregroundStyle(Brand.rausch).padding(.top, 4) }
         }
     }
 
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("About").sectionTitleStyle().padding(.bottom, 8)
-            row("Beta survey", symbol: "checklist") { openURL(BetaSurvey.url()) }
-            row("Privacy", symbol: "hand.raised") { openURL(Self.privacyURL) }
+            row("Beta survey", symbol: "checklist") { openLink(BetaSurvey.url()) }
+            row("Privacy", symbol: "hand.raised") { openLink(Self.privacyURL) }
             if let feedbackURL, let address = Secrets.feedbackEmail {
                 row("Send feedback", symbol: "bubble.left") {
                     // Without a mail app the link goes nowhere; hand over the address instead.
@@ -178,6 +211,14 @@ struct ProfileView: View {
                     .captionStyle()
             }
             .padding(.top, 16)
+        }
+    }
+
+    private func openLink(_ url: URL) {
+        if openLinksInChrome {
+            BrowserOpener.open(url)
+        } else {
+            openURL(url)
         }
     }
 
@@ -238,9 +279,53 @@ struct ProfileView: View {
         }
         .buttonStyle(.plain)
     }
+
+    private func pickerRow<Content: View>(_ title: String, symbol: String, @ViewBuilder picker: () -> Content) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                Image(systemName: symbol)
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundStyle(Palette.ink)
+                    .frame(width: 24)
+                Text(L10n.text(title)).bodyStyle()
+                Spacer()
+                picker()
+                    .labelsHidden()
+                    .tint(Palette.inkMuted)
+            }
+            .padding(.vertical, 10)
+            Hairline()
+        }
+    }
+
+    private func toggleRow(_ title: String, subtitle: String? = nil, symbol: String, isOn: Binding<Bool>) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                Image(systemName: symbol)
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundStyle(Palette.ink)
+                    .frame(width: 24)
+                Toggle(isOn: isOn) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L10n.text(title))
+                            .font(.body)
+                            .foregroundStyle(Palette.ink)
+                        if let subtitle {
+                            Text(L10n.text(subtitle))
+                                .captionStyle()
+                        }
+                    }
+                }
+                .tint(Brand.rausch)
+            }
+            .padding(.vertical, 10)
+            Hairline()
+        }
+    }
 }
 
 #Preview {
     ProfileView().environment(AppStore(loadFromDisk: false))
         .environment(PlaceCatalog()).environment(AuthenticationStore()).environment(AvatarStore())
 }
+

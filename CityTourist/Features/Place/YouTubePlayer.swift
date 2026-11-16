@@ -48,12 +48,15 @@ struct YouTubePlayer: UIViewRepresentable {
     let playback: PlaceVideoPlayback
     var isActive: Bool
 
+    @AppStorage(AppSettings.autoplayVideos) private var autoplayVideos = false
+
     func makeCoordinator() -> Coordinator { Coordinator(playback: playback) }
 
     func makeUIView(context: Context) -> WKWebView {
+        let shouldAutoplay = isActive && autoplayVideos
         let configuration = WKWebViewConfiguration()
         configuration.allowsInlineMediaPlayback = true
-        configuration.mediaTypesRequiringUserActionForPlayback = .all
+        configuration.mediaTypesRequiringUserActionForPlayback = shouldAutoplay ? [] : .all
         configuration.websiteDataStore = .nonPersistent()
         configuration.userContentController.add(context.coordinator, name: "video")
         let webView = WKWebView(frame: .zero, configuration: configuration)
@@ -64,13 +67,15 @@ struct YouTubePlayer: UIViewRepresentable {
         webView.uiDelegate = context.coordinator
         webView.accessibilityIdentifier = "placeVideoPlayer"
         let origin = Self.origin(bundleID: Bundle.main.bundleIdentifier ?? "com.tmwakalasya.citytourist")
-        webView.loadHTMLString(Self.html(videoID: videoID, origin: origin), baseURL: origin)
+        webView.loadHTMLString(Self.html(videoID: videoID, origin: origin, autoplay: shouldAutoplay), baseURL: origin)
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.playback = playback
-        if !isActive { webView.evaluateJavaScript("window.pauseVideo && window.pauseVideo();", completionHandler: nil) }
+        if !isActive {
+            webView.evaluateJavaScript("window.pauseVideo && window.pauseVideo();", completionHandler: nil)
+        }
         // Returning to the app never starts a video on the user's behalf.
     }
 
@@ -87,15 +92,15 @@ struct YouTubePlayer: UIViewRepresentable {
         URL(string: "https://\(bundleID.lowercased())")!
     }
 
-    static func html(videoID: String, origin: URL) -> String {
+    static func html(videoID: String, origin: URL, autoplay: Bool = false) -> String {
         // Values are YouTube's IDs and our bundle ID, serialized rather than
         // interpolated as JavaScript string literals.
         let options: [String: Any] = [
             "videoId": videoID, "width": "100%", "height": "100%",
-            "playerVars": ["autoplay": 0, "controls": 1, "playsinline": 1,
+            "playerVars": ["autoplay": autoplay ? 1 : 0, "controls": 1, "playsinline": 1,
                            "rel": 0, "origin": origin.absoluteString]
         ]
-        let data = try! JSONSerialization.data(withJSONObject: options, options: [.sortedKeys])
+        let data = (try? JSONSerialization.data(withJSONObject: options, options: [.sortedKeys])) ?? Data("{}".utf8)
         let json = String(decoding: data, as: UTF8.self)
         return """
         <!doctype html><html><head>
@@ -163,3 +168,4 @@ struct YouTubePlayer: UIViewRepresentable {
         }
     }
 }
+

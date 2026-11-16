@@ -4,6 +4,7 @@ import SwiftUI
 /// after a trip, the city, so each answer says what it's about.
 enum BetaSurvey {
     static let base = URL(string: "https://citytourist.pages.dev/feedback")!
+    static let promptsEnabledKey = "settings.postTripSurveyPrompts"
 
     /// How long after a trip ends the Trips list offers the survey.
     static let windowDays = 7
@@ -78,6 +79,8 @@ struct SurveyCard: View {
                 Button("Not now", action: onDone)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Palette.inkMuted)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .padding(.leading, 52)
@@ -88,3 +91,4 @@ struct SurveyCard: View {
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Palette.hairline))
     }
 }
+
