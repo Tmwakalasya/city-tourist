@@ -101,12 +101,12 @@ extension Coordinate {
 enum AppSettings {
     static let autoplayVideos = "settings.autoplayVideos"
     static let confirmBeforeDeleting = "settings.confirmBeforeDeleting"
-    static let openInSafariOrChrome = "settings.openInSafariOrChrome"
+    static let openLinksInChrome = "settings.openLinksInChrome"
     static let postTripSurveyPrompts = BetaSurvey.promptsEnabledKey
     static let lastDialCode = "auth.lastDialCode"
 
-    static var isOpenInSafariOrChrome: Bool {
-        UserDefaults.standard.bool(forKey: openInSafariOrChrome)
+    static var isOpenLinksInChrome: Bool {
+        UserDefaults.standard.bool(forKey: openLinksInChrome)
     }
 }
 

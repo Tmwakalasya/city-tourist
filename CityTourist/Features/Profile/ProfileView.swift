@@ -17,7 +17,7 @@ struct ProfileView: View {
     @AppStorage(AppSettings.autoplayVideos) private var autoplayVideos = false
     @AppStorage(AppSettings.confirmBeforeDeleting) private var confirmBeforeDeleting = true
     @AppStorage(AppSettings.postTripSurveyPrompts) private var surveyPromptsEnabled = true
-    @AppStorage(AppSettings.openInSafariOrChrome) private var openInSafariOrChrome = false
+    @AppStorage(AppSettings.openLinksInChrome) private var openLinksInChrome = false
 
     var body: some View {
         NavigationStack {
@@ -169,7 +169,7 @@ struct ProfileView: View {
             toggleRow("Autoplay videos", symbol: "play.circle", isOn: $autoplayVideos)
             toggleRow("Confirm before deleting", symbol: "trash", isOn: $confirmBeforeDeleting)
             toggleRow("Post-trip survey prompts", symbol: "checklist", isOn: $surveyPromptsEnabled)
-            toggleRow("Open in Safari or Chrome", symbol: "safari", isOn: $openInSafariOrChrome)
+            toggleRow("Open links in Chrome", symbol: "safari", isOn: $openLinksInChrome)
 
             Text("Account").sectionTitleStyle().padding(.top, 24).padding(.bottom, 8)
             if let session = auth.session {
@@ -215,7 +215,7 @@ struct ProfileView: View {
     }
 
     private func openLink(_ url: URL) {
-        if openInSafariOrChrome {
+        if openLinksInChrome {
             BrowserOpener.open(url)
         } else {
             openURL(url)

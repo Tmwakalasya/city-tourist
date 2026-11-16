@@ -28,7 +28,7 @@ struct CityTouristApp: App {
             } else {
                 RootTabView()
                     .environment(\.openURL, OpenURLAction { url in
-                        if AppSettings.isOpenInSafariOrChrome && ["http", "https"].contains(url.scheme?.lowercased()) {
+                        if AppSettings.isOpenLinksInChrome && ["http", "https"].contains(url.scheme?.lowercased()) {
                             BrowserOpener.open(url)
                             return .handled
                         }

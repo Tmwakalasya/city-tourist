@@ -73,7 +73,7 @@ struct YouTubePlayer: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.playback = playback
-        if !isActive || !autoplayVideos {
+        if !isActive {
             webView.evaluateJavaScript("window.pauseVideo && window.pauseVideo();", completionHandler: nil)
         }
         // Returning to the app never starts a video on the user's behalf.
